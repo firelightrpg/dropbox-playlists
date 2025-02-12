@@ -1,1 +1,3 @@
+black
 dropbox
+python-dotenv
