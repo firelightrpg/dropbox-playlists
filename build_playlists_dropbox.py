@@ -9,10 +9,16 @@ The script expects Dropbox credentials and paths to be set via environment varia
 
 import os
 import csv
+from typing import Any
+
 import dropbox
 from dropbox.exceptions import AuthError
 import logging
+import glob
 from dotenv import load_dotenv
+
+from mutagen.easyid3 import EasyID3
+
 
 # Configure logging
 logging.basicConfig(
@@ -46,126 +52,117 @@ except AuthError:
     raise SystemExit(1)
 
 
-def get_existing_shared_link(file_path):
+def get_existing_shared_link(mp3_filepath: str) -> Any | None:
     """Retrieve an existing shared link for a given Dropbox file.
 
     Args:
-        file_path (str): Path of the file in Dropbox.
+        mp3_filepath: Path of the file in Dropbox.
 
     Returns:
-        str or None: Shared link URL if it exists, otherwise None.
+        Shared link URL if it exists
     """
-    links = dbx.sharing_list_shared_links(path=file_path).links
+    links = dbx.sharing_list_shared_links(path=mp3_filepath).links
     for link in links:
-        if link.path_lower == file_path.lower():
-            logging.info(f"Existing link found for {file_path}: {link.url}")
+        if link.path_lower == mp3_filepath.lower():
+            logging.info(f"Existing link found for {mp3_filepath}: {link.url}")
             return link.url
     return None
 
 
-def get_or_create_shared_link(file_path):
+def get_mp3_metadata(mp3_filepath: str) -> list[str]:
+    """Extract album and contributing artists from an MP3 file.
+
+    TODO - this shouldn't be producing errors - what is the return value when it's empty? - we're just adding these
+    as tags, so just return a single list.
+
+    Args:
+        mp3_filepath:
+
+    Returns:
+        tags from mp3 metadata
+    """
+    audio = EasyID3(mp3_filepath)
+    # figure out audio
+    tags = []
+    album = [_ for _ in audio.get("album") if _]
+    if album:
+        tags.extend(album)
+
+    artists = [_ for _ in audio.get("artist") if _]
+    if artists:
+        artist_tags = [a.strip() for artist in artists for a in artist.split(",")]
+        tags.extend(artist_tags)
+
+    return tags
+
+
+def get_or_create_shared_link(mp3_filepath: str) -> str:
     """Retrieve or create a shared link for a Dropbox file.
 
     Args:
-        file_path (str): Path of the file in Dropbox.
+        mp3_filepath: Path of the file in Dropbox.
 
     Returns:
-        str: The shared link URL.
+        The shared link URL.
     """
-    existing_link = get_existing_shared_link(file_path)
+    existing_link = get_existing_shared_link(mp3_filepath)
     if existing_link:
         return existing_link
 
-    shared_link = dbx.sharing_create_shared_link_with_settings(file_path)
+    shared_link = dbx.sharing_create_shared_link_with_settings(mp3_filepath)
     url = shared_link.url
-    logging.info(f"Created new link for {file_path}: {url}")
+    logging.info(f"Created new link for {mp3_filepath}: {url}")
     return url
 
 
-def create_playlist_for_folder(local_folder_path, dropbox_folder_path):
-    """Generate a playlist CSV file for a given local folder.
+def create_playlists():
+    """Generate a playlist CSV file for all MP3 files found recursively in LOCAL_ROOT_FOLDER.
 
     Scans for MP3 files, retrieves Dropbox shared links, and saves a CSV playlist.
-
-    Args:
-        local_folder_path (str): Local directory containing MP3 files.
-        dropbox_folder_path (str): Corresponding Dropbox folder path.
+    Tracks are tagged based on their folder hierarchy and mp3 metadata for album and artist(s).
     """
     playlist = []
-    folder_name = os.path.basename(local_folder_path)
+    all_mp3_files = glob.glob(
+        os.path.normpath(os.path.join(LOCAL_ROOT_FOLDER, "**", "*.mp3")), recursive=True
+    )
+    mp3_files = sorted(list(set(all_mp3_files)))
 
-    for filename in os.listdir(local_folder_path):
-        if filename.endswith(".mp3"):
-            name = os.path.splitext(filename)[0]
-            dropbox_file_path = os.path.join(dropbox_folder_path, filename).replace(
-                "\\", "/"
-            )
+    for mp3_file in mp3_files:
+        relative_path = os.path.relpath(mp3_file, LOCAL_ROOT_FOLDER)
+        folder_structure = os.path.dirname(relative_path).split(os.sep)
+        tags = folder_structure  # Include all parent folders as tags
+        tags.extend(get_mp3_metadata(mp3_file))
 
-            logging.info(f"Getting shared link for {dropbox_file_path}")
-            src = get_or_create_shared_link(dropbox_file_path)
-            if src:
-                playlist.append([name, src, folder_name])
-
-    if playlist:
-        csv_filename = f"{folder_name}_playlist.csv"
-        csv_filepath = os.path.join(local_folder_path, csv_filename)
-        with open(csv_filepath, "w", newline="", encoding="utf-8") as csvfile:
-            csvwriter = csv.writer(csvfile)
-            csvwriter.writerow(["name", "src", "tags"])
-            csvwriter.writerows(playlist)
-        logging.info(f"Playlist created: {csv_filepath}")
-    else:
-        logging.warning(
-            f"No MP3 files found in {local_folder_path} or failed to create shared links."
+        name = os.path.splitext(os.path.basename(mp3_file))[0]
+        dropbox_file_path = os.path.join(DROPBOX_ROOT_FOLDER, relative_path).replace(
+            "\\", "/"
         )
 
+        logging.info(f"Getting shared link for {dropbox_file_path}")
+        src = get_or_create_shared_link(dropbox_file_path)
+        if src:
+            playlist.append([name, src, "|".join(tags)])
 
-def create_master_playlist():
-    """Generate a master playlist by merging all individual playlists."""
-    master_playlist = []
-    master_csv_filepath = os.path.join(LOCAL_ROOT_FOLDER, "master_playlist.csv")
+    if not playlist:
+        logging.warning("No playlist created.")
+        return
 
-    for folder_name in os.listdir(LOCAL_ROOT_FOLDER):
-        folder_path = os.path.join(LOCAL_ROOT_FOLDER, folder_name)
-        csv_filepath = os.path.join(folder_path, f"{folder_name}_playlist.csv")
-
-        if os.path.isfile(csv_filepath):
-            logging.info(f"Adding {csv_filepath} to master playlist.")
-            with open(csv_filepath, "r", encoding="utf-8") as csvfile:
-                csvreader = csv.reader(csvfile)
-                next(csvreader)  # Skip header row
-                master_playlist.extend(csvreader)
-
-    if master_playlist:
-        with open(master_csv_filepath, "w", newline="", encoding="utf-8") as csvfile:
-            csvwriter = csv.writer(csvfile)
-            csvwriter.writerow(["name", "src", "tags"])
-            csvwriter.writerows(master_playlist)
-        logging.info(f"Master playlist created: {master_csv_filepath}")
-    else:
-        logging.warning("No playlists found to merge into master playlist.")
+    master_csv_filepath = os.path.normpath(
+        os.path.join(LOCAL_ROOT_FOLDER, "master_playlist.csv")
+    )
+    with open(master_csv_filepath, "w", newline="", encoding="utf-8") as csvfile:
+        csvwriter = csv.writer(csvfile)
+        csvwriter.writerow(["name", "src", "tags"])
+        csvwriter.writerows(playlist)
+        logging.info(f"Playlist created: {master_csv_filepath}")
 
 
 def main():
     """Main execution function.
 
-    Iterates through local directories, checking for existing playlists.
-    If none exist, it generates a new one, then creates a master playlist.
+    Generates individual and master playlists based on MP3 files.
     """
-    for folder_name in os.listdir(LOCAL_ROOT_FOLDER):
-        folder_path = os.path.join(LOCAL_ROOT_FOLDER, folder_name)
-        if not os.path.isdir(folder_path) or os.path.exists(
-            os.path.join(folder_path, f"{folder_name}_playlist.csv")
-        ):
-            continue
-
-        logging.info(f"Processing folder: {folder_name}")
-        local_folder_path = os.path.join(LOCAL_ROOT_FOLDER, folder_name)
-        dropbox_folder_path = os.path.join(DROPBOX_ROOT_FOLDER, folder_name)
-        if os.path.isdir(local_folder_path):
-            create_playlist_for_folder(local_folder_path, dropbox_folder_path)
-
-    create_master_playlist()
+    create_playlists()
 
 
 if __name__ == "__main__":
