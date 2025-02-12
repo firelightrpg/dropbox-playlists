@@ -1,8 +1,10 @@
 """Script to generate Dropbox-hosted playlists for MP3 files.
 
 This script scans a local directory for MP3 files, generates Dropbox shared links,
-and creates a CSV playlist for each folder. The script expects Dropbox credentials
-and paths to be set via environment variables or a `.env` file.
+and creates a CSV playlist for each folder. Additionally, it consolidates all playlists
+into a master CSV file.
+
+The script expects Dropbox credentials and paths to be set via environment variables or a `.env` file.
 """
 
 import os
@@ -118,11 +120,37 @@ def create_playlist_for_folder(local_folder_path, dropbox_folder_path):
         )
 
 
+def create_master_playlist():
+    """Generate a master playlist by merging all individual playlists."""
+    master_playlist = []
+    master_csv_filepath = os.path.join(LOCAL_ROOT_FOLDER, "master_playlist.csv")
+
+    for folder_name in os.listdir(LOCAL_ROOT_FOLDER):
+        folder_path = os.path.join(LOCAL_ROOT_FOLDER, folder_name)
+        csv_filepath = os.path.join(folder_path, f"{folder_name}_playlist.csv")
+
+        if os.path.isfile(csv_filepath):
+            logging.info(f"Adding {csv_filepath} to master playlist.")
+            with open(csv_filepath, "r", encoding="utf-8") as csvfile:
+                csvreader = csv.reader(csvfile)
+                next(csvreader)  # Skip header row
+                master_playlist.extend(csvreader)
+
+    if master_playlist:
+        with open(master_csv_filepath, "w", newline="", encoding="utf-8") as csvfile:
+            csvwriter = csv.writer(csvfile)
+            csvwriter.writerow(["name", "src", "tags"])
+            csvwriter.writerows(master_playlist)
+        logging.info(f"Master playlist created: {master_csv_filepath}")
+    else:
+        logging.warning("No playlists found to merge into master playlist.")
+
+
 def main():
     """Main execution function.
 
     Iterates through local directories, checking for existing playlists.
-    If none exist, it generates a new one.
+    If none exist, it generates a new one, then creates a master playlist.
     """
     for folder_name in os.listdir(LOCAL_ROOT_FOLDER):
         folder_path = os.path.join(LOCAL_ROOT_FOLDER, folder_name)
@@ -136,6 +164,8 @@ def main():
         dropbox_folder_path = os.path.join(DROPBOX_ROOT_FOLDER, folder_name)
         if os.path.isdir(local_folder_path):
             create_playlist_for_folder(local_folder_path, dropbox_folder_path)
+
+    create_master_playlist()
 
 
 if __name__ == "__main__":
