@@ -43,6 +43,7 @@ except AuthError:
     print("Error: Dropbox access token is invalid or expired.")
     raise SystemExit(1)
 
+
 def get_existing_shared_link(file_path):
     """Retrieve an existing shared link for a given Dropbox file.
 
@@ -58,6 +59,7 @@ def get_existing_shared_link(file_path):
             logging.info(f"Existing link found for {file_path}: {link.url}")
             return link.url
     return None
+
 
 def get_or_create_shared_link(file_path):
     """Retrieve or create a shared link for a Dropbox file.
@@ -77,6 +79,7 @@ def get_or_create_shared_link(file_path):
     logging.info(f"Created new link for {file_path}: {url}")
     return url
 
+
 def create_playlist_for_folder(local_folder_path, dropbox_folder_path):
     """Generate a playlist CSV file for a given local folder.
 
@@ -92,7 +95,9 @@ def create_playlist_for_folder(local_folder_path, dropbox_folder_path):
     for filename in os.listdir(local_folder_path):
         if filename.endswith(".mp3"):
             name = os.path.splitext(filename)[0]
-            dropbox_file_path = os.path.join(dropbox_folder_path, filename).replace("\\", "/")
+            dropbox_file_path = os.path.join(dropbox_folder_path, filename).replace(
+                "\\", "/"
+            )
 
             logging.info(f"Getting shared link for {dropbox_file_path}")
             src = get_or_create_shared_link(dropbox_file_path)
@@ -112,6 +117,7 @@ def create_playlist_for_folder(local_folder_path, dropbox_folder_path):
             f"No MP3 files found in {local_folder_path} or failed to create shared links."
         )
 
+
 def main():
     """Main execution function.
 
@@ -130,6 +136,7 @@ def main():
         dropbox_folder_path = os.path.join(DROPBOX_ROOT_FOLDER, folder_name)
         if os.path.isdir(local_folder_path):
             create_playlist_for_folder(local_folder_path, dropbox_folder_path)
+
 
 if __name__ == "__main__":
     main()
