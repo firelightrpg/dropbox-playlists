@@ -44,6 +44,11 @@ python -m abovevtt_playlist_db
   - **New files** are processed and added.
   - **Missing files** are removed from the directory.
   - **Existing files** remain unchanged.
+- Tags are added for mp3 metadata (album and artist) and for the folder structure.
+   - For example, if an mp3 is in Cool/Naru's Way.mp3, it will get tagged with
+      - Sarah Schachner (from the metadata)
+      - Prey (from the metadata)
+      - Cool (from the folder)
 - Creates a `playlist.csv` for import into AboveVTT with the latest changes.
 
 ## Managing AboveVTT Audio
