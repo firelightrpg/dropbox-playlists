@@ -52,7 +52,7 @@ AboveVTT does **not** have a "clear" function for audio. If you remove a file fr
    - Open the browser console (`F12` in most browsers).
    - Run:
      ```js
-     localStorage.removeItem('abovevtt-audio')
+     localStorage.removeItem('audio.library.track')
      ```
    - Refresh AboveVTT.
 3. Re-import the updated `playlist.csv` in AboveVTT.
