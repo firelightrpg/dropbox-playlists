@@ -47,7 +47,7 @@ python -m abovevtt_playlist_db
 
 ## Managing AboveVTT Audio
 AboveVTT does **not** have a "clear" function for audio. If you remove a file from your dropbox, it will **still** appear in AboveVTT until manually deleted. The audio list is stored in the browser cache, so:
-1. Use **Export JSON** in AboveVTT to back up your track list.
+1. Use **Export AUDIO** in AboveVTT to back up your track list.
 2. If necessary, clear the AboveVTT audio storage:
    - Open the browser console (`F12` in most browsers).
    - Run:
@@ -56,6 +56,7 @@ AboveVTT does **not** have a "clear" function for audio. If you remove a file fr
      ```
    - Refresh AboveVTT.
 3. Re-import the updated `playlist.csv` in AboveVTT.
+4. Export your new audio!
 
 ## Notes
 - This script does **not** modify existing Dropbox files, only gets or creates their shared links.
