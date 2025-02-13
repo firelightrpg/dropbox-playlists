@@ -6,7 +6,7 @@ This script scans a local directory for MP3 files, generates Dropbox shared link
 ## Requirements
 - Python 3.x
 - Dropbox API access token
-   - See the [Drobox Developer](https://www.dropbox.com/developers) 
+   - See [Drobox Developer](https://www.dropbox.com/developers) 
 - Mutagen library (`pip install mutagen`)
 - dotenv library (`pip install python-dotenv`)
 
