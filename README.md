@@ -60,8 +60,7 @@ python -m abovevtt_playlist_db
          - Rhythmicyally mixed, major key
       - Theme
          - Rhythmicyally mixed, minor or mixed key
-       
-      _For example, here are some sample tracks._
+   - Example categorizartions       
      - Dark
         - [Sunshine (Adagio in D Minor)](https://music.youtube.com/watch?v=DUWTqXo4-io)
      - Light
