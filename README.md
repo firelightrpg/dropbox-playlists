@@ -32,40 +32,39 @@ python -m abovevtt_playlist_db
 
 ## How It Works
 - Loads the existing playlist directory (`playlist_directory.json`) if available.
-- Scans for `.mp3` files in the <LOCAL_ROOT_FOLDER> directory.
+- Scans for `.mp3` files in the `<LOCAL_ROOT_FOLDER>` directory.
 - Compares with the playlist directory:
   - **New files** are processed and added.
   - **Missing files** are removed from the directory.
   - **Existing files** remain unchanged.
-- Tags are added for mp3 metadata (album and artist) and for the folder structure.
-   - For example, if an mp3 is in `Cool/Naru's Way.mp3`, it will get tagged with
-      - Sarah Schachner (from the metadata)
-      - Prey (from the metadata)
-      - Cool (from the folder)
-   - Analysis - the character, emotion and spirit of the song is analyzed into five broad moods
-      - Dark
-         - Ambient (rhythmically sparse), minor key
-      - Light
-         - Ambient (rhythmically sparse), major key
-      - Combat
-         - Rhythmicyally dense, minor key
-      - Triumph
-         - Rhythmicyally mixed, major key
-      - Theme
-         - Rhythmicyally mixed, minor or mixed key
-   - Example categorizartions       
-     - Dark
-        - [Sunshine (Adagio in D Minor)](https://music.youtube.com/watch?v=DUWTqXo4-io)
-     - Light
-        - [A White Stallion Rampant](https://music.youtube.com/watch?v=-zud9S0Yydo)
-     - Combat
-        - [Defenders of the Realm](https://music.youtube.com/watch?v=66A0wy2l29U)
-     - Triumph
-        - [Clouds Over Northumbria](https://music.youtube.com/watch?v=yY6m4WVLxyU)
-     - Theme
-        - [Ravensthorpe](https://music.youtube.com/watch?v=YALP8tHYg-w)
+- Tags are added based on:
+  - **MP3 metadata** (album and artist)
+  - **Folder structure** (e.g., `Cool/Naru's Way.mp3` → tags: `Cool`)
+  - **Mood classification** (see below)
 
-- Creates a `playlist.csv` for import into AboveVTT with the latest changes.
+### **Mood Classification**
+The script analyzes the **character, emotion, and spirit** of each track into five broad moods:
+
+| Mood     | Description  | Characteristics |
+|----------|-------------|----------------|
+| **Dark** | Ambient, minor key | Sparse rhythm, low energy |
+| **Light** | Ambient, major key | Sparse rhythm, uplifting |
+| **Combat** | High-intensity battle music | Rhythmic, minor key |
+| **Triumph** | Victory themes | Rhythmic, major key |
+| **Theme** | General-purpose soundtrack | Mixed rhythm, minor/mixed key |
+
+### **Example Categorizations**
+| Mood       | Example Track |
+|------------|----------------------------------------------------------------|
+| **Dark**   | [Sunshine (Adagio in D Minor)](https://music.youtube.com/watch?v=DUWTqXo4-io) |
+| **Light**  | [A White Stallion Rampant](https://music.youtube.com/watch?v=-zud9S0Yydo) |
+| **Combat** | [Defenders of the Realm](https://music.youtube.com/watch?v=66A0wy2l29U) |
+| **Triumph** | [Clouds Over Northumbria](https://music.youtube.com/watch?v=yY6m4WVLxyU) |
+| **Theme**  | [Ravensthorpe](https://music.youtube.com/watch?v=YALP8tHYg-w) |
+
+## **Playlist Generation**
+- **Creates** `playlist.csv` for import into AboveVTT with all the latest changes.
+- **Categorized tracks** make it easy to filter by mood in AboveVTT.
 
 ## Managing AboveVTT Audio
 AboveVTT does **not** have a "clear" function for audio. If you remove a file from your dropbox, it will **still** appear in AboveVTT until manually deleted. The audio list is stored in the browser cache, so:
