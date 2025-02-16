@@ -49,6 +49,18 @@ python -m abovevtt_playlist_db
       - Sarah Schachner (from the metadata)
       - Prey (from the metadata)
       - Cool (from the folder)
+   - Analysis - the character, emotion and spirit of the song is analyzed into four broad moods
+      - Dark
+         - Ambient (rhythmically sparse), minor key
+      - Light
+         - Ambient (rhythmically sparse), major key
+      - Combat
+         - Rhythmicyally dense, minor key
+      - Triumph
+         - Rhythmicyally mixed, major key
+      - Theme
+         - Rhythmicyally mixed, minor or mixed key
+
 - Creates a `playlist.csv` for import into AboveVTT with the latest changes.
 
 ## Managing AboveVTT Audio
