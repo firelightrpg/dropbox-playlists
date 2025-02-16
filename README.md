@@ -64,7 +64,7 @@ The script analyzes the **character, emotion, and spirit** of each track into fi
 | **Theme**  | [Ravensthorpe](https://music.youtube.com/watch?v=YALP8tHYg-w) |
 
 #### Limitations
-To improve the speed it only analyzes 30 seconds of the track, but it does try to analyze from 30 seconds in. This does mean some songs that start one way then later change in rhythym or key may be classified incorrectly. You can adjust this here. 
+To improve the speed it only analyzes 30 seconds of the track, but it does try to analyze from 30 seconds in. This does mean some songs that start one way then later change in rhythym or key may be classified incorrectly. You can adjust this [here](analyze_track.py#L40). 
 
 ## **Playlist Generation**
 - **Creates** `playlist.csv` for import into AboveVTT with all the latest changes.
