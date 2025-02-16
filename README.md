@@ -81,7 +81,8 @@ AboveVTT does **not** have a "clear" function for audio. If you remove a file fr
      ```
    - Refresh AboveVTT.
 3. Re-import the updated `playlist.csv` in AboveVTT.
-4. Export your new audio!
+4. Use AboveVTT's Export `AUDIO` to save your new track library as a json!
+   - This will prevent you from losing your work on cache clear, switching browsers, etc. 
 
 ## Notes
 - This script does **not** modify existing Dropbox files, only gets or creates their shared links.
