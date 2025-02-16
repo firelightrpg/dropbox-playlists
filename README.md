@@ -57,7 +57,7 @@ The script analyzes the **character, emotion, and spirit** of each track into fi
 ### **Example Categorizations**
 | Mood       | Example Track |
 |------------|----------------------------------------------------------------|
-| **Dark**   | [Sunshine (Adagio in D Minor)](https://music.youtube.com/watch?v=DUWTqXo4-io) |
+| **Dark**   | [Going Dark](https://music.youtube.com/watch?v=gG1pJS1Oif4) |
 | **Light**  | [A White Stallion Rampant](https://music.youtube.com/watch?v=-zud9S0Yydo) |
 | **Combat** | [Defenders of the Realm](https://music.youtube.com/watch?v=66A0wy2l29U) |
 | **Triumph** | [Clouds Over Northumbria](https://music.youtube.com/watch?v=yY6m4WVLxyU) |
