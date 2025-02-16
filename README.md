@@ -6,11 +6,9 @@ This script scans a local directory for MP3 files, generates Dropbox shared link
 ## Requirements
 - Python 3.x
 - Dropbox API access token
-   - See [Drobox Developer](https://www.dropbox.com/developers) 
-- Mutagen library (`pip install mutagen`)
-- dotenv library (`pip install python-dotenv`)
+   - See [Drobox Developer App Console](https://www.dropbox.com/developers/apps?_tk=pilot_lp&_ad=topbar4&_camp=myapps) 
 
-### Easy Method with a virtual environment (recommended!)
+### Dependencies
 ```bash
 cd <workspace>
 python -m venv .venv
@@ -26,11 +24,6 @@ pip install -r requirements.txt
    DROPBOX_ROOT_FOLDER=/path/to/your/dropbox/folder
    LOCAL_ROOT_FOLDER=/path/to/your/local/mp3/folder
    ```
-2. Install dependencies:
-   ```sh
-   pip install -r requirements.txt
-   ```
-
 ## Usage
 Run the script:
 ```sh
@@ -39,17 +32,43 @@ python -m abovevtt_playlist_db
 
 ## How It Works
 - Loads the existing playlist directory (`playlist_directory.json`) if available.
-- Scans for `.mp3` files in the <LOCAL_ROOT_FOLDER> directory.
+- Scans for `.mp3` files in the `<LOCAL_ROOT_FOLDER>` directory.
 - Compares with the playlist directory:
   - **New files** are processed and added.
-  - **Missing files** are removed from the directory.
+  - **Missing files** are removed from the playlist directory.
+     - **Note:** _This will not remove them from AboveVTT._
   - **Existing files** remain unchanged.
-- Tags are added for mp3 metadata (album and artist) and for the folder structure.
-   - For example, if an mp3 is in `Cool/Naru's Way.mp3`, it will get tagged with
-      - Sarah Schachner (from the metadata)
-      - Prey (from the metadata)
-      - Cool (from the folder)
-- Creates a `playlist.csv` for import into AboveVTT with the latest changes.
+- Tags are added based on:
+  - **MP3 metadata** (album and artist)
+  - **Folder structure** (e.g., `Cool/Naru's Way.mp3` → tags: `Cool`)
+  - **Mood classification** (see below)
+
+### **Mood Classification**
+The script analyzes the **character, emotion, and spirit** of each track into five broad moods:
+
+| Mood     | Description  | Characteristics |
+|----------|-------------|----------------|
+| **Dark** | Ambient, minor key | Sparse rhythm, low energy |
+| **Light** | Ambient, major key | Sparse rhythm, uplifting |
+| **Combat** | High-intensity battle music | Rhythmic, minor key |
+| **Triumph** | Victory themes | Rhythmic, major key |
+| **Theme** | General-purpose soundtrack | Mixed rhythm, minor/mixed key |
+
+### **Example Categorizations**
+| Mood       | Example Track |
+|------------|----------------------------------------------------------------|
+| **Dark**   | [Going Dark](https://music.youtube.com/watch?v=gG1pJS1Oif4) |
+| **Light**  | [A White Stallion Rampant](https://music.youtube.com/watch?v=-zud9S0Yydo) |
+| **Combat** | [Defenders of the Realm](https://music.youtube.com/watch?v=66A0wy2l29U) |
+| **Triumph** | [Clouds Over Northumbria](https://music.youtube.com/watch?v=yY6m4WVLxyU) |
+| **Theme**  | [Ravensthorpe](https://music.youtube.com/watch?v=YALP8tHYg-w) |
+
+#### Limitations
+To improve the speed it only analyzes 30 seconds of the track, but it does try to analyze from 30 seconds in. This does mean some songs that start one way then later change in rhythym or key may be classified incorrectly. You can adjust this [here](analyze_track.py#L40). 
+
+## **Playlist Generation**
+- **Creates** `playlist.csv` for import into AboveVTT with all the latest changes.
+- **Categorized tracks** make it easy to filter by mood in AboveVTT.
 
 ## Managing AboveVTT Audio
 AboveVTT does **not** have a "clear" function for audio. If you remove a file from your dropbox, it will **still** appear in AboveVTT until manually deleted. The audio list is stored in the browser cache, so:
@@ -62,7 +81,8 @@ AboveVTT does **not** have a "clear" function for audio. If you remove a file fr
      ```
    - Refresh AboveVTT.
 3. Re-import the updated `playlist.csv` in AboveVTT.
-4. Export your new audio!
+4. Use AboveVTT's Export `AUDIO` to save your new track library as a json!
+   - This will prevent you from losing your work on cache clear, switching browsers, etc. 
 
 ## Notes
 - This script does **not** modify existing Dropbox files, only gets or creates their shared links.
@@ -77,10 +97,9 @@ If a shared link isn't found:
 - Manually generate a shared link and re-run the script.
 
 ### Playlist Not Updating
-- Ensure the script has **write permissions** to `playlist.csv`.
-- Check the logs for errors (`log.txt` if enabled).
+- Files in your `playlist_directory.json` are only analyzed once. 
 - When in doubt, delete the `playlist_directory.json` file. It will get regenerated, but will take some time to grab
-all the links from dropbox, especially if you have a large library! 
+all the links from dropbox and perform the analysis, especially if you have a large library! 
 
 ---
 **Author**: John, Wyrmwood, firelightrpg, <whatever expletive you'd like to refer to me as>  

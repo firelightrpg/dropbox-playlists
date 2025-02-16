@@ -7,19 +7,19 @@ into a master CSV file.
 The script expects Dropbox credentials and paths to be set via environment variables or a `.env` file.
 """
 
-import json
-import os
 import csv
+import glob
+import json
+import logging
+import os
 from typing import Any
 
 import dropbox
-from dropbox.exceptions import AuthError
-import logging
-import glob
 from dotenv import load_dotenv
-
+from dropbox.exceptions import AuthError
 from mutagen.easyid3 import EasyID3
 
+from analyze_track import analyze_track
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -135,7 +135,7 @@ def create_playlist() -> None:
             playlist_directory = json.load(f)
 
     all_mp3_files = glob.glob(os.path.normpath(os.path.join(LOCAL_ROOT_FOLDER, "**", "*.mp3")), recursive=True)
-    mp3_files = sorted(list(set(all_mp3_files)))
+    mp3_files = sorted(set(all_mp3_files), key=lambda f: os.path.getctime(f))
 
     for mp3_file in mp3_files:
         if mp3_file in playlist_directory:
@@ -144,6 +144,7 @@ def create_playlist() -> None:
             relative_path = os.path.relpath(mp3_file, LOCAL_ROOT_FOLDER)
             folder_structure = os.path.dirname(relative_path).split(os.sep)
             tags = folder_structure  # Include all parent folders as tags
+            tags.append(analyze_track(mp3_file))  # Add mood classification
             tags.extend(get_mp3_metadata(mp3_file))
             tags = "|".join(list(set(tags)))
 
