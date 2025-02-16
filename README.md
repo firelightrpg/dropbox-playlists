@@ -36,7 +36,7 @@ python -m abovevtt_playlist_db
 - Compares with the playlist directory:
   - **New files** are processed and added.
   - **Missing files** are removed from the playlist directory.
-     - **Note: ** _This will not remove them from AboveVTT._
+     - **Note:** _This will not remove them from AboveVTT._
   - **Existing files** remain unchanged.
 - Tags are added based on:
   - **MP3 metadata** (album and artist)
