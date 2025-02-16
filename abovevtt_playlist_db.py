@@ -135,7 +135,7 @@ def create_playlist() -> None:
             playlist_directory = json.load(f)
 
     all_mp3_files = glob.glob(os.path.normpath(os.path.join(LOCAL_ROOT_FOLDER, "**", "*.mp3")), recursive=True)
-    mp3_files = sorted(list(set(all_mp3_files)))
+    mp3_files = sorted(set(all_mp3_files), key=lambda f: os.path.getctime(f))
 
     for mp3_file in mp3_files:
         if mp3_file in playlist_directory:
