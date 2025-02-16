@@ -97,10 +97,9 @@ If a shared link isn't found:
 - Manually generate a shared link and re-run the script.
 
 ### Playlist Not Updating
-- Ensure the script has **write permissions** to `playlist.csv`.
-- Check the logs for errors (`log.txt` if enabled).
+- Files in your `playlist_directory.json` are only analyzed once. 
 - When in doubt, delete the `playlist_directory.json` file. It will get regenerated, but will take some time to grab
-all the links from dropbox, especially if you have a large library! 
+all the links from dropbox and perform the analysis, especially if you have a large library! 
 
 ---
 **Author**: John, Wyrmwood, firelightrpg, <whatever expletive you'd like to refer to me as>  
