@@ -13,12 +13,6 @@ from selenium.webdriver.chrome.webdriver import WebDriver
 from starlette.websockets import WebSocketDisconnect
 from ytmusicapi import YTMusic
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,  # Set desired log level (DEBUG, INFO, WARNING, ERROR)
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
-
 APP = FastAPI()
 PORT = 26796
 COMBAT = "PLOofa859fAd1M6SpAP7DwnkHLQYRCwuAh"
@@ -111,15 +105,15 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             message = await websocket.receive_text()
             if message == "combat_start":
-                logging.info("Starting combat music")
+                print("Starting combat music")
                 driver.start_music(combat=True)
             else:
-                logging.info("Starting ambient music")
+                print("Starting ambient music")
                 driver.start_music(combat=False)
     except WebSocketDisconnect:
-        logging.info("Websocket disconnected")
+        print("Websocket disconnected")
     finally:
-        logging.info("Websocket closed")
+        print("Websocket closed")
 
 
 if __name__ == "__main__":
