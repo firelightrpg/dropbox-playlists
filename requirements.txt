@@ -7,3 +7,4 @@ fastapi==0.115.8
 uvicorn==0.34.0
 websockets>=15.0,<16
 selenium>=4.28.1,<5
+ytmusicapi>=1.10.1,<2
