@@ -35,11 +35,10 @@ def analyze_track(file_path, detail=False):
     """
     y, sr = librosa.load(file_path, sr=None)
     track_duration = int(librosa.get_duration(y=y, sr=sr))
+    duration = min(track_duration, 180)
+    start_time = max(0, min(30, duration - 30))
 
-    # Ensure we don't try to analyze past the track length
-    start_time = min(30, track_duration - 30)  # Analyze from 30s in, but adjust if track is short
-
-    y, sr = librosa.load(file_path, sr=None, duration=30, offset=start_time)
+    y, sr = librosa.load(file_path, sr=None, duration=duration, offset=start_time)
 
     if HPF:
         y = high_pass_filter(y, sr, cutoff=150)
