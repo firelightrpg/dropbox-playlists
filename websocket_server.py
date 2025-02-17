@@ -1,12 +1,13 @@
+"""
+Websocket server for switching shuffled playlists
+"""
+
 import glob
 import logging
-import os.path
-import random
-import time
+import os
 
 from fastapi import FastAPI, WebSocket
 from selenium import webdriver
-from selenium.common import WebDriverException
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.webdriver import WebDriver
 from starlette.websockets import WebSocketDisconnect
@@ -25,15 +26,13 @@ YTMUSIC = YTMusic()
 
 
 class Playlists:
-    _instance = None  # Singleton instance
+    _instance = None
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance.combat_playlist = YTMUSIC.get_playlist(COMBAT)
             cls._instance.dark_playlist = YTMUSIC.get_playlist(DARK)
-            cls._instance._combat_tracks = None
-            cls._instance._dark_tracks = None
 
         return cls._instance
 
@@ -50,7 +49,7 @@ PLAYLISTS = Playlists()
 
 
 class Driver:
-    _instance = None  # Singleton instance
+    _instance = None
 
     def __new__(cls):
         if cls._instance is None:
@@ -60,17 +59,20 @@ class Driver:
             cls._instance.dark_playlist = DARK
             cls._instance.base_url = "https://music.youtube.com"
             cls._instance._setup_driver()
-            cls._instance.start_music(combat=True)  # this won't autoplay
-            time.sleep(1)
-            cls._instance.start_music(combat=False)
 
         return cls._instance
 
     def _setup_driver(self):
+        if self._driver is not None:
+            return  # Ensure we don't instantiate twice
+
         options = webdriver.ChromeOptions()
         options.add_argument("--start-maximized")
         # options.add_argument("--headless")
         options.add_argument(f"--load-extension={UBLOCK_LATEST}")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--start-maximized")
+
         service = Service()
         self._driver = webdriver.Chrome(options=options, service=service)
 
@@ -78,51 +80,25 @@ class Driver:
     def driver(self) -> WebDriver:
         return self._driver
 
-    def close_window(self, playlist: str) -> None:
-        """
-
-        Args:
-            playlist:
-        """
-        for handle in self.driver.window_handles:
-            self.driver.switch_to.window(handle)
-            if playlist in self.driver.current_url:
-                self.driver.close()
-                time.sleep(1)
-
     def start_music(self, combat=False):
         """
-        Handles playlist switching and playback state.
-
-        Args:
-            combat (bool): Whether to switch to combat music.
+        Starts music playback, ensuring the right playlist is selected.
         """
-        # close previous, if exists
-        # self.driver.close()
+        playlist = self.combat_playlist if combat else self.dark_playlist
 
-        # start new
-        # format of url is https://music.youtube.com/watch?v=<track id>&list=<playlist id>
-        if combat:
-            track_id = random.choice(PLAYLISTS.combat_tracks)
-            url = f"{self.base_url}/watch?v={track_id}&list={self.combat_playlist}"
-        else:
-            track_id = random.choice(PLAYLISTS.dark_tracks)
-            url = f"{self.base_url}/watch?v={track_id}&list={self.dark_playlist}"
+        # Check if we're already on the correct playlist
+        if playlist in self.driver.current_url:
+            return
 
-        self.driver.get(url)
+        track_url = f"{self.base_url}/watch?list={playlist}&shuffle=1"
 
-
-# Instantiate the Singleton **BEFORE** Uvicorn starts
-driver = Driver()
+        self.driver.get(track_url)
 
 
 @APP.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """
     Handles incoming WebSocket messages for switching music.
-
-    Args:
-        websocket (WebSocket): The WebSocket connection.
     """
     await websocket.accept()
     try:
@@ -139,7 +115,8 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 if __name__ == "__main__":
+    # Instantiate Singleton BEFORE Uvicorn starts
+    driver = Driver()
     import uvicorn
 
-    # Run Uvicorn in a way that prevents multiple processes
     uvicorn.run(APP, host="127.0.0.1", port=PORT, workers=1)
