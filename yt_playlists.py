@@ -87,10 +87,10 @@ def get_mp3_metadata(mp3_filepath: str) -> list[str]:
     audio = EasyID3(mp3_filepath)
     tags = []
 
-    album = [_ for _ in audio.get("album") if _]
+    album = [_ for _ in audio.get("album", []) if _]
     tags.extend(album)
 
-    artists = [_ for _ in audio.get("artist") if _]
+    artists = [_ for _ in audio.get("artist", []) if _]
     artist_tags = [a.strip() for artist in artists for a in artist.split(",")]
     tags.extend(artist_tags)
 
@@ -131,13 +131,11 @@ def download_album(album_id: str, album_title: str, temp_dir: str) -> list[dict]
 
         print("Analyzing Track")
         mood = analyze_track(track_name)
-        relative_path = os.path.relpath(os.path.dirname(track_name), temp_dir)
-        tags = relative_path.split(os.sep)
-        tags.append(mood)
-        tags.extend(get_mp3_metadata(track_name))
-        tags = list(set(tags))
+        artists = []
+        for artist in album_info["artists"]:
+            artists.append(artist["name"])
 
-        track_data.append({track_title: {"tags": tags, "track_id": track_id}})
+        track_data.append({track_title: {"artist": artists, "album": album_title, "mood": mood, "track_id": track_id}})
 
     return track_data
 
@@ -171,7 +169,6 @@ def process_artists(artists: list[dict], playlist_directory: dict) -> dict:
                 track_data = download_album(album["browseId"], album_title, temp_dir)
                 playlist_directory[album_title].extend(track_data)
 
-            break  # Process only one album per artist
         break  # Process only one artist
 
     return playlist_directory
