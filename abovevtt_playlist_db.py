@@ -17,9 +17,9 @@ from typing import Any
 import dropbox
 from dotenv import load_dotenv
 from dropbox.exceptions import AuthError
-from mutagen.easyid3 import EasyID3
 
 from analyze_track import analyze_track
+from yt_playlists import get_mp3_metadata
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -65,29 +65,6 @@ def get_existing_shared_link(mp3_filepath: str) -> Any | None:
             return link
 
     return None
-
-
-def get_mp3_metadata(mp3_filepath: str) -> list[str]:
-    """
-    Extract album and contributing artists from an MP3 file.
-
-    Args:
-        mp3_filepath:
-
-    Returns:
-        tags from mp3 metadata
-    """
-    audio = EasyID3(mp3_filepath)
-    # figure out audio
-    tags = []
-    album = [_ for _ in audio.get("album") if _]
-    tags.extend(album)
-
-    artists = [_ for _ in audio.get("artist") if _]
-    artist_tags = [a.strip() for artist in artists for a in artist.split(",")]
-    tags.extend(artist_tags)
-
-    return tags
 
 
 def get_or_create_shared_link(mp3_filepath: str) -> Any:
