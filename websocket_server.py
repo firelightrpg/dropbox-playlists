@@ -3,7 +3,6 @@ Websocket server for switching shuffled playlists
 """
 
 import glob
-import logging
 import os
 
 from fastapi import FastAPI, WebSocket
@@ -15,8 +14,8 @@ from ytmusicapi import YTMusic
 
 APP = FastAPI()
 PORT = 26796
-COMBAT = "PLOofa859fAd1M6SpAP7DwnkHLQYRCwuAh"
-DARK = "PLOofa859fAd0PUbWTcjwQd0RtNMOoFT8_"
+COMBAT = "PLOofa859fAd0932pUaNEUP-b2J6Ly5Pcn"
+DARK = "PLOofa859fAd1h-lPKuYSnj3dDjeGo43nt"
 UBLOCK_PATH = os.path.join(
     os.path.expanduser("~"),
     r"AppData\Local\Google\Chrome\User Data\Default\Extensions\cjpalhdlnbpafiamejdnhcphjbkeiagm",

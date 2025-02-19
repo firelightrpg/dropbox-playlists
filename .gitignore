@@ -3,7 +3,5 @@
 .env
 
 __pycache__/
-/headers_auth.json
-/cookies.txt
-/browser.json
-/yt_playlists.json
+/*.json
+/jsons

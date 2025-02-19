@@ -1,15 +1,32 @@
 """
 Analyze audio for mood
 """
-import glob
 
 import librosa
 import numpy as np
 from librosa import feature
+from mutagen.easyid3 import EasyID3
 from mutagen.mp3 import MP3
 from scipy.signal import butter, filtfilt
 
 HPF = False  # Toggle high-pass filtering
+
+
+def get_artists_from_mp3_metadata(mp3_filepath: str) -> list[str]:
+    """
+    Extract contributing artists from an MP3 file.
+
+    Args:
+        mp3_filepath:
+
+    Returns:
+        artist(s)
+    """
+    audio = EasyID3(mp3_filepath)
+    artists = [_ for _ in audio.get("artist") if _]
+    artists = [a.strip() for artist in artists for a in artist.split(",")]
+
+    return artists
 
 
 def high_pass_filter(y, sr, cutoff=150):
@@ -29,7 +46,7 @@ def get_track_length(file_path):
     return audio.info.length  # Returns duration in seconds
 
 
-def analyze_track(file_path, detail=False):
+def analyze_track(file_path: str) -> dict[str, str | list[str]]:
     """
     Analyze an audio file for rhythmic density, key (Major/Minor), and BPM.
     """
@@ -50,15 +67,10 @@ def analyze_track(file_path, detail=False):
     onset_env = librosa.onset.onset_strength(y=y_percussive, sr=sr, hop_length=1024)
     rhythmic_density = np.mean(onset_env)  # Average onset strength
 
-    # Estimate BPM
-    tempo, beats = librosa.beat.beat_track(y=y, sr=sr, onset_envelope=onset_env, hop_length=1024, sparse=False)
-    bpm = round(tempo.item())
-
     # Key Estimation (Using Chroma Features)
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
     chroma_sum = chroma.sum(axis=1)  # Sum chroma activation per note
     root_index = np.argmax(chroma_sum)  # Most dominant note
-    root_note = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"][root_index]
 
     # Determine Major/Minor Mode
     # Identify Minor 2nd (♭2) Strength
@@ -90,7 +102,6 @@ def analyze_track(file_path, detail=False):
     else:
         rhythmic_category = "Mixed"
 
-
     # Categorization Based on Key + Rhythmic Type
     if rhythmic_category == "Rhythmic" and key_type == "Major":
         final_category = "Triumph"
@@ -111,48 +122,6 @@ def analyze_track(file_path, detail=False):
     else:
         final_category = "Theme"
 
-    if detail:
-        # Print or return results
-        return {
-            "file": file_path,
-            "root": root_note,
-            "mode": key_type,
-            "bpm": bpm,
-            "density": rhythmic_density,
-            "rhythmic_category": rhythmic_category,
-            "final_category": final_category,
-        }
+    artists = get_artists_from_mp3_metadata(file_path)
 
-    return final_category  # Only return "Combat", "Dark", "Triumph", etc.
-
-
-
-
-def test_stub():
-    """
-    Adjust the return to get the full analysis
-
-    """
-    # Run analysis on tracks
-    # styles = ["Ambient-Dark", "Combat", "Ambient-Light", "Theme"]
-    styles = ["AC-Origins"]
-    results_by_style = {}
-
-    for style in styles:
-        results = []
-        for track in glob.glob(rf"C:\Users\wyrmwood\Dropbox\public\music\{style}\*.mp3"):
-            analysis = analyze_track(track, detail=True)
-            results.append(analysis)
-
-        results_by_style[style] = results
-
-        print(f"\n{style} Results:")
-        avg_density = sum(r["density"] for r in results) / len(results)
-        print(f"Average Density: {avg_density:.3f}")
-        print(f"Max Density: {max(r['density'] for r in results):.3f}")
-        print(f"Min Density: {min(r['density'] for r in results):.3f}")
-
-        for r in results:
-            print(
-                f"{r['file']} → {r['final_category']} | Key: {r['root']} {r['mode']} | BPM: {r['bpm']} | Density: {r['density']:.3f}"
-            )
+    return {"mood": final_category, "artists": artists}

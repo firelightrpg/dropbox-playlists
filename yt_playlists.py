@@ -36,7 +36,7 @@ def load_existing_playlists(filename: str = "yt_playlists.json") -> dict:
 def save_playlists(playlist_directory: dict, filename: str = "yt_playlists.json"):
     """Save the updated playlist directory to a JSON file."""
     with open(filename, "w", encoding="utf-8") as f:
-        json.dump(playlist_directory, f, indent=2)
+        json.dump(playlist_directory, f, indent=2, ensure_ascii=False)
 
 
 def get_artist_albums(artist_id: str) -> list[dict]:
@@ -50,7 +50,7 @@ def sanitize_filename(name: str) -> str:
     return re.sub(r"[^a-zA-Z0-9\-_]", "-", name).strip("-")
 
 
-def analyze_and_store(track_path: str) -> tuple[str, str]:
+def analyze_and_store(track_path: str) -> tuple[str, dict[str, any]]:
     """Analyze the mood of a track."""
     return track_path, analyze_track(track_path)
 
@@ -60,7 +60,7 @@ def download_track(track_id: str, track_title: str, folder_name: str) -> str | N
     track_name = os.path.join(folder_name, f"{track_title}.mp3")
 
     subprocess.run(
-        f'yt-dlp -x --audio-format mp3 --no-mtime --concurrent-fragments 5 -o "{track_name}" '
+        f'yt-dlp -x --audio-format mp3 --add-metadata --no-mtime --concurrent-fragments 5 -o "{track_name}" '
         f'"https://music.youtube.com/watch?v={track_id}"',
         cwd=folder_name,
         shell=True,
@@ -84,7 +84,12 @@ def download_album(album_id: str, album_title: str, temp_dir: str) -> list[dict]
     print(f"Downloading {len(tracks)} tracks for album: {album_title}")
     with ThreadPoolExecutor(max_workers=4) as executor:
         future_to_track = {
-            executor.submit(download_track, track["videoId"], sanitize_filename(track["title"]), folder_name): track
+            executor.submit(
+                download_track,
+                track["videoId"],
+                sanitize_filename(track["title"]),
+                folder_name,
+            ): track
             for track in tracks
         }
 
@@ -98,18 +103,16 @@ def download_album(album_id: str, album_title: str, temp_dir: str) -> list[dict]
     # Parallel Mood Analysis
     print("Analyzing Tracks...")
     with ProcessPoolExecutor() as executor:
-        mood_results = dict(executor.map(analyze_and_store, downloaded_tracks.keys()))
+        results = dict(executor.map(analyze_and_store, downloaded_tracks.keys()))
 
     # Store Track Metadata
-    artists = [artist["name"] for artist in album_info["artists"]]
+    artists = [artist["name"] for artist in track["artists"]]
     track_data = [
         {
-            track["title"]: {
-                "artist": artists,
-                "album": album_title,
-                "mood": mood_results.get(track_path, "unknown"),
-                "track_id": track["videoId"],
-            }
+            "title": track["title"],
+            "artist": results[track_path]["artists"],
+            "mood": results[track_path]["mood"],
+            "track_id": track["videoId"],
         }
         for track_path, track in downloaded_tracks.items()
     ]
@@ -147,8 +150,8 @@ def process_artist(artist: dict, playlist_directory: dict) -> dict:
                 print(f"Skipping already processed album: {album_title}")
                 continue
 
-            print(f"Processing album: {album_title}")
-            playlist_directory[album_title] = [{"playlist_id": album["audioPlaylistId"]}]
+            print(f"Processing artist: {artist_name} - album: {album_title}")
+            playlist_directory[album_title] = []
 
         with TemporaryDirectory() as temp_dir:
             track_data = download_album(album["browseId"], album_title, temp_dir)
@@ -158,20 +161,23 @@ def process_artist(artist: dict, playlist_directory: dict) -> dict:
                 playlist_directory[album_title].extend(track_data)
                 save_playlists(playlist_directory)  # Save after each album
 
+        print(f"Finished processing artist: {artist_name} - album: {album_title}.")
+
+    print(f"Finished processing artist: {artist_name}.")
+
     return playlist_directory
 
 
 def process_artists(artists: list[dict], playlist_directory: dict) -> dict:
     """Process subscribed artists, retrieve albums, and download tracks."""
     with ThreadPoolExecutor(max_workers=2) as executor:
-        future_to_artist = {executor.submit(process_artist, artist, playlist_directory): artist for artist in artists}
+        future_to_artist = {
+            executor.submit(process_artist, artist, playlist_directory): artist
+            for artist in artists
+        }
 
         for future in concurrent.futures.as_completed(future_to_artist):
-            artist = future_to_artist[future]
-            try:
-                playlist_directory.update(future.result())
-            except Exception as e:
-                print(f"Error processing artist {artist['artist']}: {e}")
+            playlist_directory.update(future.result())
 
     return playlist_directory
 
@@ -180,6 +186,13 @@ def main():
     """Main function to fetch subscribed artists, process albums, and update playlists."""
     subscribed_artists = get_subscribed_artists()
     print(f"Found {len(subscribed_artists)} subscribed artists.")
+
+    norse_artists = ["A Tergo Lupi", "Danheim", "Forndom", "Heilung", "Rúnfell"]
+    subscribed_artists = [
+        artist
+        for artist in subscribed_artists
+        if any(a in artist["artist"] for a in norse_artists)
+    ]
 
     playlist_directory = load_existing_playlists()
     process_artists(subscribed_artists, playlist_directory)
