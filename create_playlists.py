@@ -8,7 +8,7 @@ from ytmusicapi import YTMusic
 
 ytmusic = YTMusic("browser.json")
 # Load the JSON data
-with open("yt_playlists.json", "r", encoding="utf-8") as f:
+with open("jsons/norse-tracks.json", "r", encoding="utf-8") as f:
     data = json.load(f)
 
 playlists = {"Dark": [], "Combat": []}

@@ -7,15 +7,14 @@ import os
 
 from fastapi import FastAPI, WebSocket
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.webdriver import WebDriver
 from starlette.websockets import WebSocketDisconnect
 from ytmusicapi import YTMusic
 
 APP = FastAPI()
 PORT = 26796
-COMBAT = "PLOofa859fAd0932pUaNEUP-b2J6Ly5Pcn"
-DARK = "PLOofa859fAd1h-lPKuYSnj3dDjeGo43nt"
+COMBAT = "PLOofa859fAd0932pUaNEUP-b2J6Ly5Pcn"  # Norse
+DARK = "PLOofa859fAd1h-lPKuYSnj3dDjeGo43nt"  # Norse
 UBLOCK_PATH = os.path.join(
     os.path.expanduser("~"),
     r"AppData\Local\Google\Chrome\User Data\Default\Extensions\cjpalhdlnbpafiamejdnhcphjbkeiagm",
@@ -50,13 +49,22 @@ PLAYLISTS = Playlists()
 class Driver:
     _instance = None
 
+    """
+    
+    """
+    # https://www.youtube.com/watch?&list=PLOofa859fAd1h-lPKuYSnj3dDjeGo43nt&pp=gAQB&shuffle=1&loop=1
+    # https://www.youtube.com/watch?v=p81B2zlyz_M&list=PLOofa859fAd1h-lPKuYSnj3dDjeGo43nt&pp=gAQB
+    # https://music.youtube.com/watch?playlist=PLOofa859fAd0932pUaNEUP-b2J6Ly5Pcn
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._driver = None
             cls._instance.combat_playlist = COMBAT
             cls._instance.dark_playlist = DARK
-            cls._instance.base_url = "https://music.youtube.com"
+            cls._instance.base_url = (
+                "https://music.youtube.com/watch?&list={}&shuffle=1"
+            )
             cls._instance._setup_driver()
 
         return cls._instance
@@ -65,15 +73,12 @@ class Driver:
         if self._driver is not None:
             return  # Ensure we don't instantiate twice
 
-        options = webdriver.ChromeOptions()
-        options.add_argument("--start-maximized")
-        # options.add_argument("--headless")
-        options.add_argument(f"--load-extension={UBLOCK_LATEST}")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--start-maximized")
+        root_profile_path = r"C:\Users\wyrmwood\AppData\Roaming\Mozilla\Firefox\Profiles\j504w7ys.default-release"
 
-        service = Service()
-        self._driver = webdriver.Chrome(options=options, service=service)
+        options = webdriver.FirefoxOptions()
+        options.add_argument("-profile")
+        options.add_argument(root_profile_path)
+        self._driver = webdriver.Firefox(options=options)
 
     @property
     def driver(self) -> WebDriver:
@@ -89,7 +94,7 @@ class Driver:
         if playlist in self.driver.current_url:
             return
 
-        track_url = f"{self.base_url}/watch?list={playlist}&shuffle=1"
+        track_url = self.base_url.format(playlist)
 
         self.driver.get(track_url)
 

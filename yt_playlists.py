@@ -141,6 +141,8 @@ def process_artist(artist: dict, playlist_directory: dict) -> dict:
 
     for album in albums:
         album_title = album["title"]
+        if "Elder" not in album_title or "Oblivion" in album_title:
+            continue
 
         # Reload JSON inside the lock to get the latest state
         with json_lock:
@@ -187,11 +189,11 @@ def main():
     subscribed_artists = get_subscribed_artists()
     print(f"Found {len(subscribed_artists)} subscribed artists.")
 
-    norse_artists = ["A Tergo Lupi", "Danheim", "Forndom", "Heilung", "Rúnfell"]
+    elder_artists = ["Brad Derrick", "Jeremy Soule", "Inon Zur"]
     subscribed_artists = [
         artist
         for artist in subscribed_artists
-        if any(a in artist["artist"] for a in norse_artists)
+        if any(a in artist["artist"] for a in elder_artists)
     ]
 
     playlist_directory = load_existing_playlists()
