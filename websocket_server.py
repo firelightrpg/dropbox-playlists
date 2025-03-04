@@ -13,8 +13,13 @@ from ytmusicapi import YTMusic
 
 APP = FastAPI()
 PORT = 26796
-COMBAT = "PLOofa859fAd0932pUaNEUP-b2J6Ly5Pcn"  # Norse
-DARK = "PLOofa859fAd1h-lPKuYSnj3dDjeGo43nt"  # Norse
+# COMBAT = "PLOofa859fAd0932pUaNEUP-b2J6Ly5Pcn"  # Norse
+# DARK = "PLOofa859fAd1h-lPKuYSnj3dDjeGo43nt"  # Norse
+# COMBAT = "PLOofa859fAd0CfvyGhDrcCoVusUu6K1pP"  # ES
+# DARK = "PLOofa859fAd0GJQvfYHaG-AusaUFodSB0"  # ES
+# COMBAT = "PLOofa859fAd35COo1IK35DvkmaIDNJVRy"  # Sarah
+DARK = "PLOofa859fAd0Zkjx1Wy40xwyaRiTjmLT7"  # Sarah
+COMBAT = "PLOofa859fAd3NWrXXykSR9-sY6ypAFomo"  # Epic Battle
 UBLOCK_PATH = os.path.join(
     os.path.expanduser("~"),
     r"AppData\Local\Google\Chrome\User Data\Default\Extensions\cjpalhdlnbpafiamejdnhcphjbkeiagm",

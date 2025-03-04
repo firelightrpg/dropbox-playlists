@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import threading
+import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from tempfile import TemporaryDirectory
 
@@ -25,7 +26,9 @@ def get_subscribed_artists(limit: int = 100) -> list[dict]:
     return ytmusic.get_library_subscriptions(limit=limit)
 
 
-def load_existing_playlists(filename: str = "yt_playlists.json") -> dict:
+def load_existing_playlists(
+    filename: str = os.path.join("jsons", "elder-scrolls-tracks.json")
+) -> dict:
     """Load existing playlists from a JSON file if it exists."""
     if os.path.exists(filename):
         with open(filename, encoding="utf-8") as f:
@@ -33,10 +36,15 @@ def load_existing_playlists(filename: str = "yt_playlists.json") -> dict:
     return {}
 
 
-def save_playlists(playlist_directory: dict, filename: str = "yt_playlists.json"):
+def save_playlists(
+    playlist_directory: dict,
+    filename: str = os.path.join("jsons", "elder-scrolls-tracks.json"),
+):
     """Save the updated playlist directory to a JSON file."""
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(playlist_directory, f, indent=2, ensure_ascii=False)
+
+    time.sleep(2)
 
 
 def get_artist_albums(artist_id: str) -> list[dict]:
@@ -59,16 +67,21 @@ def download_track(track_id: str, track_title: str, folder_name: str) -> str | N
     """Download a single track using yt-dlp."""
     track_name = os.path.join(folder_name, f"{track_title}.mp3")
 
-    subprocess.run(
+    completed_process = subprocess.run(
         f'yt-dlp -x --audio-format mp3 --add-metadata --no-mtime --concurrent-fragments 5 -o "{track_name}" '
-        f'"https://music.youtube.com/watch?v={track_id}"',
+        f"--cookies-from-browser firefox "
+        f'"https://music.youtube.com/watch?v={track_id}" '
+        '--extractor-args "youtube:player_client=web" '
+        '--user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0',
         cwd=folder_name,
         shell=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
     )
+    if completed_process.returncode:
+        raise RuntimeError(completed_process.stdout.decode())
 
-    return track_name if os.path.exists(track_name) else None
+    return track_name
 
 
 def download_album(album_id: str, album_title: str, temp_dir: str) -> list[dict]:
@@ -81,6 +94,7 @@ def download_album(album_id: str, album_title: str, temp_dir: str) -> list[dict]
     tracks = album_info["tracks"]
 
     # Parallel Download
+    downloaded_tracks = {}
     print(f"Downloading {len(tracks)} tracks for album: {album_title}")
     with ThreadPoolExecutor(max_workers=4) as executor:
         future_to_track = {
@@ -93,7 +107,6 @@ def download_album(album_id: str, album_title: str, temp_dir: str) -> list[dict]
             for track in tracks
         }
 
-        downloaded_tracks = {}
         for future in concurrent.futures.as_completed(future_to_track):
             track = future_to_track[future]
             track_path = future.result()
@@ -106,7 +119,6 @@ def download_album(album_id: str, album_title: str, temp_dir: str) -> list[dict]
         results = dict(executor.map(analyze_and_store, downloaded_tracks.keys()))
 
     # Store Track Metadata
-    artists = [artist["name"] for artist in track["artists"]]
     track_data = [
         {
             "title": track["title"],
@@ -162,6 +174,9 @@ def process_artist(artist: dict, playlist_directory: dict) -> dict:
             with json_lock:
                 playlist_directory[album_title].extend(track_data)
                 save_playlists(playlist_directory)  # Save after each album
+                print(
+                    f"Saved {len(track_data)} tracks for {artist_name} - {album_title}"
+                )
 
         print(f"Finished processing artist: {artist_name} - album: {album_title}.")
 

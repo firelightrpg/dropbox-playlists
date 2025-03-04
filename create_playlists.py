@@ -8,13 +8,13 @@ from ytmusicapi import YTMusic
 
 ytmusic = YTMusic("browser.json")
 # Load the JSON data
-with open("jsons/norse-tracks.json", "r", encoding="utf-8") as f:
+with open("jsons/elder-scrolls-tracks.json", "r", encoding="utf-8") as f:
     data = json.load(f)
 
 playlists = {"Dark": [], "Combat": []}
 
 artist = ""
-album = ""
+album = "Elder"
 for mood in ("Dark", "Combat"):
     new_tracks = {
         t["track_id"]
@@ -30,10 +30,10 @@ for mood in ("Dark", "Combat"):
 
 
 response = ytmusic.create_playlist(
-    "Norse-Combat", "Combat", "PUBLIC", video_ids=playlists["Combat"]
+    "Elder-Scrolls-Combat", "Combat", "PUBLIC", video_ids=playlists["Combat"]
 )
 print(f"combat: {response}")
 response = ytmusic.create_playlist(
-    "Norse-Dark", "Dark Ambient", "PUBLIC", video_ids=playlists["Dark"]
+    "Elder-Scrolls-Dark", "Dark Ambient", "PUBLIC", video_ids=playlists["Dark"]
 )
 print(f"dark: {response}")
