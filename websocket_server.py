@@ -34,8 +34,9 @@ playlists = {
     },
 }
 
-DARK = playlists["dark"]["council_of_9"]
-COMBAT = playlists["combat"]["epic_battle"]
+DARK = playlists["dark"]["dead_melodies"]
+COMBAT = playlists["combat"]["sarah_combat"]
+START = "OLAK5uy_mZIGETZHwMeRVHVO4Gh_tYqapGP2GkIb4"
 
 # DARK = playlists["dark"]["sarah_dark"]
 # COMBAT = playlists["combat"]["ghelfi_combat"]
@@ -82,10 +83,13 @@ class Driver:
             cls._instance._driver = None
             cls._instance.combat_playlist = COMBAT
             cls._instance.dark_playlist = DARK
+            cls._instance.start_playlist = START
             cls._instance.base_url = (
                 "https://music.youtube.com/watch?&list={}&shuffle=1"
             )
             cls._instance._setup_driver()
+            # Navigate to START playlist after driver creation
+            cls._instance._open_playlist(cls._instance.start_playlist)
 
         return cls._instance
 
@@ -104,19 +108,24 @@ class Driver:
     def driver(self) -> WebDriver:
         return self._driver
 
+    def _open_playlist(self, playlist_id: str):
+        """
+        Opens a playlist by its ID, avoiding reload if already on the same playlist.
+        """
+        if not self._driver:
+            return
+        # Check if we're already on the correct playlist
+        if playlist_id in self.driver.current_url:
+            return
+        track_url = self.base_url.format(playlist_id)
+        self.driver.get(track_url)
+
     def start_music(self, combat=False):
         """
         Starts music playback, ensuring the right playlist is selected.
         """
         playlist = self.combat_playlist if combat else self.dark_playlist
-
-        # Check if we're already on the correct playlist
-        if playlist in self.driver.current_url:
-            return
-
-        track_url = self.base_url.format(playlist)
-
-        self.driver.get(track_url)
+        self._open_playlist(playlist)
 
 
 @APP.websocket("/ws")
