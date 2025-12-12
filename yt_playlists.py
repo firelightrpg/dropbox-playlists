@@ -10,11 +10,13 @@ import subprocess
 import threading
 import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from datetime import datetime
 from tempfile import TemporaryDirectory
 
 from ytmusicapi import YTMusic
 
 from analyze_track import analyze_track
+from config import config
 
 # Initialize YouTube Music API
 ytmusic = YTMusic("browser.json")
@@ -27,7 +29,7 @@ def get_subscribed_artists(limit: int = 100) -> list[dict]:
 
 
 def load_existing_playlists(
-    filename: str = os.path.join("jsons", "elder-scrolls-tracks.json")
+    filename: str = os.path.join(config.JSON_DIR, "elder-scrolls-tracks.json")
 ) -> dict:
     """Load existing playlists from a JSON file if it exists."""
     if os.path.exists(filename):
@@ -38,7 +40,7 @@ def load_existing_playlists(
 
 def save_playlists(
     playlist_directory: dict,
-    filename: str = os.path.join("jsons", "elder-scrolls-tracks.json"),
+    filename: str = os.path.join(config.JSON_DIR, "elder-scrolls-tracks.json"),
 ):
     """Save the updated playlist directory to a JSON file."""
     with open(filename, "w", encoding="utf-8") as f:
@@ -58,14 +60,40 @@ def sanitize_filename(name: str) -> str:
     return re.sub(r"[^a-zA-Z0-9\-_]", "-", name).strip("-")
 
 
-def analyze_and_store(track_path: str) -> tuple[str, dict[str, any]]:
-    """Analyze the mood of a track."""
-    return track_path, analyze_track(track_path)
+def log_download(artist_name: str, album_title: str, folder_path: str):
+    """Log downloaded files for later manual cleanup."""
+    if not config.DEBUG_MODE:
+        return
+
+    log_file = config.DOWNLOAD_LOG
+    timestamp = datetime.now().isoformat()
+
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(f"{timestamp} | {artist_name} | {album_title} | {folder_path}\n")
+
+
+def analyze_and_store(track_info: tuple[str, str]) -> tuple[str, dict[str, Any]]:
+    """Analyze the mood of a track.
+
+    Args:
+        track_info: Tuple of (track_path, artist_name)
+    """
+    track_path, artist_name = track_info
+    return track_path, analyze_track(track_path, artist_name)
 
 
 def download_track(track_id: str, track_title: str, folder_name: str) -> str | None:
     """Download a single track using yt-dlp."""
     track_name = os.path.join(folder_name, f"{track_title}.mp3")
+
+    # Skip if file already exists and we're in debug mode
+    if (
+        config.DEBUG_MODE
+        and config.SKIP_EXISTING_DOWNLOADS
+        and os.path.exists(track_name)
+    ):
+        print(f"Skipping existing: {track_title}")
+        return track_name
 
     completed_process = subprocess.run(
         f'yt-dlp -x --audio-format mp3 --add-metadata --no-mtime --concurrent-fragments 5 -o "{track_name}" '
@@ -84,14 +112,27 @@ def download_track(track_id: str, track_title: str, folder_name: str) -> str | N
     return track_name
 
 
-def download_album(album_id: str, album_title: str, temp_dir: str) -> list[dict]:
-    """Download all tracks from an album concurrently, then analyze them."""
+def download_album(
+    album_id: str, album_title: str, temp_dir: str, artist_name: str = None
+) -> list[dict]:
+    """Download all tracks from an album concurrently, then analyze them.
+
+    Args:
+        album_id: YouTube Music album ID
+        album_title: Title of the album
+        temp_dir: Directory to store downloaded files
+        artist_name: Name of the artist (for settings and logging)
+    """
     print(f"Downloading album: {album_title}")
     album_info = ytmusic.get_album(album_id)
     folder_name = os.path.join(temp_dir, sanitize_filename(album_title))
     os.makedirs(folder_name, exist_ok=True)
 
     tracks = album_info["tracks"]
+
+    # Log download if in debug mode
+    if config.DEBUG_MODE:
+        log_download(artist_name or "Unknown", album_title, folder_name)
 
     # Parallel Download
     downloaded_tracks = {}
@@ -116,7 +157,11 @@ def download_album(album_id: str, album_title: str, temp_dir: str) -> list[dict]
     # Parallel Mood Analysis
     print("Analyzing Tracks...")
     with ProcessPoolExecutor() as executor:
-        results = dict(executor.map(analyze_and_store, downloaded_tracks.keys()))
+        # Pass both track_path and artist_name for artist-specific settings
+        track_infos = [
+            (track_path, artist_name) for track_path in downloaded_tracks.keys()
+        ]
+        results = dict(executor.map(analyze_and_store, track_infos))
 
     # Store Track Metadata
     track_data = [
@@ -125,6 +170,15 @@ def download_album(album_id: str, album_title: str, temp_dir: str) -> list[dict]
             "artist": results[track_path]["artists"],
             "mood": results[track_path]["mood"],
             "track_id": track["videoId"],
+            # Include debug info if in debug mode
+            **(
+                {
+                    "rhythmic_density": results[track_path].get("rhythmic_density"),
+                    "key_type": results[track_path].get("key_type"),
+                }
+                if config.DEBUG_MODE
+                else {}
+            ),
         }
         for track_path, track in downloaded_tracks.items()
     ]
@@ -167,8 +221,17 @@ def process_artist(artist: dict, playlist_directory: dict) -> dict:
             print(f"Processing artist: {artist_name} - album: {album_title}")
             playlist_directory[album_title] = []
 
-        with TemporaryDirectory() as temp_dir:
-            track_data = download_album(album["browseId"], album_title, temp_dir)
+        # Use persistent directory in debug mode, temporary otherwise
+        if config.DEBUG_MODE:
+            # Create persistent directory for this artist
+            download_dir = os.path.join(
+                config.DOWNLOAD_DIR, sanitize_filename(artist_name)
+            )
+            os.makedirs(download_dir, exist_ok=True)
+
+            track_data = download_album(
+                album["browseId"], album_title, download_dir, artist_name
+            )
 
             # Update the playlist data inside the lock
             with json_lock:
@@ -177,6 +240,20 @@ def process_artist(artist: dict, playlist_directory: dict) -> dict:
                 print(
                     f"Saved {len(track_data)} tracks for {artist_name} - {album_title}"
                 )
+        else:
+            # Production mode: use temporary directory (auto-cleanup)
+            with TemporaryDirectory() as temp_dir:
+                track_data = download_album(
+                    album["browseId"], album_title, temp_dir, artist_name
+                )
+
+                # Update the playlist data inside the lock
+                with json_lock:
+                    playlist_directory[album_title].extend(track_data)
+                    save_playlists(playlist_directory)  # Save after each album
+                    print(
+                        f"Saved {len(track_data)} tracks for {artist_name} - {album_title}"
+                    )
 
         print(f"Finished processing artist: {artist_name} - album: {album_title}.")
 

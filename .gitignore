@@ -6,3 +6,10 @@ __pycache__/
 /*.json
 /jsons
 /cookies.txt
+
+# Debug mode directories
+/downloads/
+*.log
+
+# Keep artist_settings tracked, but ignore example
+/artist_settings/EXAMPLE.json

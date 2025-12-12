@@ -9,7 +9,9 @@ from mutagen.easyid3 import EasyID3
 from mutagen.mp3 import MP3
 from scipy.signal import butter, filtfilt
 
-HPF = False  # Toggle high-pass filtering
+from artist_settings import artist_settings_manager
+
+HPF = False  # Toggle high-pass filtering (deprecated - use artist settings)
 
 
 def get_artists_from_mp3_metadata(mp3_filepath: str) -> list[str]:
@@ -46,19 +48,48 @@ def get_track_length(file_path):
     return audio.info.length  # Returns duration in seconds
 
 
-def analyze_track(file_path: str) -> dict[str, str | list[str]]:
+def analyze_track(
+    file_path: str, artist_name: str = None
+) -> dict[str, str | list[str] | float]:
     """
     Analyze an audio file for rhythmic density, key (Major/Minor), and BPM.
+
+    Args:
+        file_path: Path to the audio file
+        artist_name: Name of the artist (for loading custom settings)
+
+    Returns:
+        Dictionary with mood and artists
     """
+    # Get artist-specific settings if artist_name is provided
+    if artist_name:
+        settings = artist_settings_manager.get_settings(artist_name)
+        rhythmic_threshold = settings.rhythmic_threshold
+        ambient_threshold = settings.ambient_threshold
+        use_hpf = settings.use_hpf
+        hpf_cutoff = settings.hpf_cutoff
+        minor_2nd_sensitivity = settings.minor_2nd_sensitivity
+        max_duration = settings.max_duration
+        start_offset = settings.start_offset
+    else:
+        # Default settings
+        rhythmic_threshold = 1.8
+        ambient_threshold = 1.6
+        use_hpf = HPF
+        hpf_cutoff = 150.0
+        minor_2nd_sensitivity = 0.5
+        max_duration = 180
+        start_offset = 30
+
     y, sr = librosa.load(file_path, sr=None)
     track_duration = int(librosa.get_duration(y=y, sr=sr))
-    duration = min(track_duration, 180)
-    start_time = max(0, min(30, duration - 30))
+    duration = min(track_duration, max_duration)
+    start_time = max(0, min(start_offset, duration - start_offset))
 
     y, sr = librosa.load(file_path, sr=None, duration=duration, offset=start_time)
 
-    if HPF:
-        y = high_pass_filter(y, sr, cutoff=150)
+    if use_hpf:
+        y = high_pass_filter(y, sr, cutoff=hpf_cutoff)
 
     # Harmonic & Percussive Separation
     y_harmonic, y_percussive = librosa.effects.hpss(y)
@@ -85,7 +116,7 @@ def analyze_track(file_path: str) -> dict[str, str | list[str]]:
     major_third_strength = chroma[major_third_index].sum()
 
     # Determine Major/Minor Based on Thirds AND Minor 2nd
-    if minor_2nd_strength > (major_third_strength * 0.5):  # If Minor 2nd is at least 50% as strong as Major 3rd
+    if minor_2nd_strength > (major_third_strength * minor_2nd_sensitivity):
         key_type = "Minor"  # Override to Minor
     elif major_third_strength > minor_third_strength:
         key_type = "Major"
@@ -95,9 +126,9 @@ def analyze_track(file_path: str) -> dict[str, str | list[str]]:
         key_type = "Mixed"
 
     # Categorization Based on Rhythmic Density
-    if rhythmic_density > 1.8:  # Lower Combat threshold slightly
+    if rhythmic_density > rhythmic_threshold:
         rhythmic_category = "Rhythmic"
-    elif rhythmic_density < 1.6:  # Raise Ambient threshold slightly
+    elif rhythmic_density < ambient_threshold:
         rhythmic_category = "Ambient"
     else:
         rhythmic_category = "Mixed"
@@ -124,4 +155,9 @@ def analyze_track(file_path: str) -> dict[str, str | list[str]]:
 
     artists = get_artists_from_mp3_metadata(file_path)
 
-    return {"mood": final_category, "artists": artists}
+    return {
+        "mood": final_category,
+        "artists": artists,
+        "rhythmic_density": float(rhythmic_density),  # Include for debugging
+        "key_type": key_type,  # Include for debugging
+    }
