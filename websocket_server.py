@@ -2,6 +2,8 @@
 Websocket server for switching shuffled playlists
 """
 
+import random
+
 from fastapi import FastAPI, WebSocket
 from selenium import webdriver
 from selenium.webdriver.chrome.webdriver import WebDriver
@@ -32,11 +34,27 @@ playlists = {
         "epic_battle": "PLOofa859fAd3NWrXXykSR9-sY6ypAFomo",
         "angelic_battle": "OLAK5uy_nGR61e1t6ilQnSJTDcxt0hzKaSI-UDAN0",
     },
+    "theme": {
+        "Last Kingdom": "OLAK5uy_mZIGETZHwMeRVHVO4Gh_tYqapGP2GkIb4",
+        "AudioMachine": "RDAOYmENuG8uYcGYZz9v53FP3g",
+        "Zack Hemsey": "RDAO_V1-pywGQJ1b7c4eUDkv_Q",
+        "Runfell": "RDAOjI7sSD-xfhzwydBVrKHImg",
+        "Ludivico Einaudi": "RDAOcxQuz-ELu51ZpArhWuw9Xg",
+        "Ninja Tracks": "RDAOsJqg6s67bVGfyAP_xhvqdQ",
+        "Frida Johannsson": "RDAOqTxg0cAmbtlrTNsJDF87DA",
+        "Sarah Schachner": "RDAOVWTPuk9dutMH5IUQvuRXaA",
+        "Brad Derrick": "RDAOvPMKEr6qZ3scdMYECXpfKw",
+        "Two Steps from Hell": "RDAO6GGjT7rs1JdgEco3wIgmTw",
+        "Twelve Titans Music": "RDAOQwAKhnwpWvkSkshD2uTsIQ",
+        "Eternal Eclipse": "RDAO6VCYoh2N-opk04YSfO1JwA",
+        "Epic Music World": "RDAOmKU4UNbAk9lZ1JvJrNuxyA",
+    },
 }
 
 DARK = playlists["dark"]["dead_melodies"]
 COMBAT = playlists["combat"]["sarah_combat"]
-START = "OLAK5uy_mZIGETZHwMeRVHVO4Gh_tYqapGP2GkIb4"
+START = random.choice(list(playlists["theme"].values()))
+
 
 # DARK = playlists["dark"]["sarah_dark"]
 # COMBAT = playlists["combat"]["ghelfi_combat"]

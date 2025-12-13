@@ -22,7 +22,9 @@ from mutagen.easyid3 import EasyID3
 from analyze_track import analyze_track
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -32,7 +34,9 @@ REQUIRED_VARS = ["DROPBOX_ACCESS_TOKEN", "DROPBOX_ROOT_FOLDER", "LOCAL_ROOT_FOLD
 MISSING_VARS = [var for var in REQUIRED_VARS if var not in os.environ]
 
 if MISSING_VARS:
-    logging.error(f"Error: The following required environment variables are missing: {', '.join(MISSING_VARS)}")
+    logging.error(
+        f"Error: The following required environment variables are missing: {', '.join(MISSING_VARS)}"
+    )
     raise SystemExit(1)
 
 # Load environment variables
@@ -125,7 +129,9 @@ def create_playlist() -> None:
     Tracks are tagged based on their folder hierarchy and mp3 metadata for album and artist(s).
     """
     playlist_path = os.path.normpath(os.path.join(LOCAL_ROOT_FOLDER, "playlist.csv"))
-    playlist_directory_path = os.path.normpath(os.path.join(LOCAL_ROOT_FOLDER, "playlist_directory.json"))
+    playlist_directory_path = os.path.normpath(
+        os.path.join(LOCAL_ROOT_FOLDER, "playlist_directory.json")
+    )
     playlist = []
 
     # Load existing playlist directory, if any
@@ -134,7 +140,9 @@ def create_playlist() -> None:
         with open(playlist_directory_path, encoding="utf-8") as f:
             playlist_directory = json.load(f)
 
-    all_mp3_files = glob.glob(os.path.normpath(os.path.join(LOCAL_ROOT_FOLDER, "**", "*.mp3")), recursive=True)
+    all_mp3_files = glob.glob(
+        os.path.normpath(os.path.join(LOCAL_ROOT_FOLDER, "**", "*.mp3")), recursive=True
+    )
     mp3_files = sorted(set(all_mp3_files), key=lambda f: os.path.getctime(f))
 
     for mp3_file in mp3_files:
@@ -149,7 +157,9 @@ def create_playlist() -> None:
             tags = "|".join(list(set(tags)))
 
             name = os.path.splitext(os.path.basename(mp3_file))[0]
-            dropbox_file_path = os.path.join(DROPBOX_ROOT_FOLDER, relative_path).replace("\\", "/")
+            dropbox_file_path = os.path.join(
+                DROPBOX_ROOT_FOLDER, relative_path
+            ).replace("\\", "/")
 
             logging.info(f"Getting shared link for {dropbox_file_path}")
             src = get_or_create_shared_link(dropbox_file_path).url
