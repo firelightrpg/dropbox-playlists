@@ -12,6 +12,7 @@ import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import datetime
 from tempfile import TemporaryDirectory
+from typing import Any
 
 from ytmusicapi import YTMusic
 
@@ -84,23 +85,22 @@ def analyze_and_store(track_info: tuple[str, str]) -> tuple[str, dict[str, Any]]
 
 def download_track(track_id: str, track_title: str, folder_name: str) -> str | None:
     """Download a single track using yt-dlp."""
-    track_name = os.path.join(folder_name, f"{track_title}.mp3")
+    track_filename = f"{track_title}.mp3"
+    track_path = os.path.join(folder_name, track_filename)
 
     # Skip if file already exists and we're in debug mode
     if (
         config.DEBUG_MODE
         and config.SKIP_EXISTING_DOWNLOADS
-        and os.path.exists(track_name)
+        and os.path.exists(track_path)
     ):
         print(f"Skipping existing: {track_title}")
-        return track_name
+        return track_path
 
     completed_process = subprocess.run(
-        f'yt-dlp -x --audio-format mp3 --add-metadata --no-mtime --concurrent-fragments 5 -o "{track_name}" '
+        f'yt-dlp -x --audio-format mp3 --add-metadata --no-mtime -o "{track_filename}" '
         f"--cookies-from-browser firefox "
-        f'"https://music.youtube.com/watch?v={track_id}" '
-        '--extractor-args "youtube:player_client=web" '
-        '--user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0',
+        f'"https://music.youtube.com/watch?v={track_id}" ',
         cwd=folder_name,
         shell=True,
         stdout=subprocess.PIPE,
@@ -109,7 +109,7 @@ def download_track(track_id: str, track_title: str, folder_name: str) -> str | N
     if completed_process.returncode:
         raise RuntimeError(completed_process.stdout.decode())
 
-    return track_name
+    return track_path
 
 
 def download_album(
@@ -150,9 +150,12 @@ def download_album(
 
         for future in concurrent.futures.as_completed(future_to_track):
             track = future_to_track[future]
-            track_path = future.result()
-            if track_path:
-                downloaded_tracks[track_path] = track
+            try:
+                track_path = future.result()
+                if track_path:
+                    downloaded_tracks[track_path] = track
+            except Exception as e:
+                print(f"  Failed to download '{track['title']}': {e}")
 
     # Parallel Mood Analysis
     print("Analyzing Tracks...")
