@@ -26,9 +26,7 @@ def get_subscribed_artists(limit: int = 100) -> list[dict]:
     return ytmusic.get_library_subscriptions(limit=limit)
 
 
-def load_existing_playlists(
-    filename: str = os.path.join("jsons", "elder-scrolls-tracks.json")
-) -> dict:
+def load_existing_playlists(filename: str = os.path.join("jsons", "elder-scrolls-tracks.json")) -> dict:
     """Load existing playlists from a JSON file if it exists."""
     if os.path.exists(filename):
         with open(filename, encoding="utf-8") as f:
@@ -174,9 +172,7 @@ def process_artist(artist: dict, playlist_directory: dict) -> dict:
             with json_lock:
                 playlist_directory[album_title].extend(track_data)
                 save_playlists(playlist_directory)  # Save after each album
-                print(
-                    f"Saved {len(track_data)} tracks for {artist_name} - {album_title}"
-                )
+                print(f"Saved {len(track_data)} tracks for {artist_name} - {album_title}")
 
         print(f"Finished processing artist: {artist_name} - album: {album_title}.")
 
@@ -188,10 +184,7 @@ def process_artist(artist: dict, playlist_directory: dict) -> dict:
 def process_artists(artists: list[dict], playlist_directory: dict) -> dict:
     """Process subscribed artists, retrieve albums, and download tracks."""
     with ThreadPoolExecutor(max_workers=2) as executor:
-        future_to_artist = {
-            executor.submit(process_artist, artist, playlist_directory): artist
-            for artist in artists
-        }
+        future_to_artist = {executor.submit(process_artist, artist, playlist_directory): artist for artist in artists}
 
         for future in concurrent.futures.as_completed(future_to_artist):
             playlist_directory.update(future.result())
@@ -205,11 +198,7 @@ def main():
     print(f"Found {len(subscribed_artists)} subscribed artists.")
 
     elder_artists = ["Brad Derrick", "Jeremy Soule", "Inon Zur"]
-    subscribed_artists = [
-        artist
-        for artist in subscribed_artists
-        if any(a in artist["artist"] for a in elder_artists)
-    ]
+    subscribed_artists = [artist for artist in subscribed_artists if any(a in artist["artist"] for a in elder_artists)]
 
     playlist_directory = load_existing_playlists()
     process_artists(subscribed_artists, playlist_directory)

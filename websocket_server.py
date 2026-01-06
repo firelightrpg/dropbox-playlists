@@ -2,11 +2,16 @@
 Websocket server for switching shuffled playlists
 """
 
+import random
+
 from fastapi import FastAPI, WebSocket
 from selenium import webdriver
 from selenium.webdriver.chrome.webdriver import WebDriver
 from starlette.websockets import WebSocketDisconnect
 from ytmusicapi import YTMusic
+
+from webdriver_manager.firefox import GeckoDriverManager
+import os
 
 APP = FastAPI()
 PORT = 26796
@@ -32,11 +37,19 @@ playlists = {
         "epic_battle": "PLOofa859fAd3NWrXXykSR9-sY6ypAFomo",
         "angelic_battle": "OLAK5uy_nGR61e1t6ilQnSJTDcxt0hzKaSI-UDAN0",
     },
+    "start": {
+        "born_again": "OLAK5uy_kf-rwJJGIYaMii7yBxLDx0hXb6zc_cVrQ",
+        "invincible": "OLAK5uy_liCXamJIm1qRUO4Yf5JrX1RGSOFyduLaQ",
+        "last_kingdom": "OLAK5uy_mZIGETZHwMeRVHVO4Gh_tYqapGP2GkIb4",
+        "kingdom_of_heaven": "OLAK5uy_nBJGbRP2Ei0bsysPMlUKu9ewztbcbv5VY",
+        "destiny": "OLAK5uy_l7l9jJeZm2FisO-3dBAKWilvZ4tltIdJE",
+        "kalots": "OLAK5uy_n8T7sbqNO2Bm87mbt3uHVaWC17hS2kEfY",
+    },
 }
 
 DARK = playlists["dark"]["dead_melodies"]
 COMBAT = playlists["combat"]["sarah_combat"]
-START = "OLAK5uy_mZIGETZHwMeRVHVO4Gh_tYqapGP2GkIb4"
+START = random.choice(list(playlists["start"].values()))
 
 # DARK = playlists["dark"]["sarah_dark"]
 # COMBAT = playlists["combat"]["ghelfi_combat"]
@@ -84,9 +97,7 @@ class Driver:
             cls._instance.combat_playlist = COMBAT
             cls._instance.dark_playlist = DARK
             cls._instance.start_playlist = START
-            cls._instance.base_url = (
-                "https://music.youtube.com/watch?&list={}&shuffle=1"
-            )
+            cls._instance.base_url = "https://music.youtube.com/watch?&list={}&shuffle=1"
             cls._instance._setup_driver()
             # Navigate to START playlist after driver creation
             cls._instance._open_playlist(cls._instance.start_playlist)
@@ -97,12 +108,45 @@ class Driver:
         if self._driver is not None:
             return  # Ensure we don't instantiate twice
 
-        root_profile_path = r"C:\Users\wyrmwood\AppData\Roaming\Mozilla\Firefox\Profiles\j504w7ys.default-release"
+        import os
+        import platform
+        from selenium.webdriver.firefox.service import Service
+        from selenium.webdriver.firefox.options import Options
 
-        options = webdriver.FirefoxOptions()
-        options.add_argument("-profile")
-        options.add_argument(root_profile_path)
-        self._driver = webdriver.Firefox(options=options)
+        options = Options()
+
+        if platform.system() == "Linux":
+            # Linux - use existing flatpak profile with uBlock installed
+            tmp_dir_path = f"{os.environ['XDG_RUNTIME_DIR']}/app/org.mozilla.firefox/tmp"
+            os.makedirs(tmp_dir_path, exist_ok=True)
+            os.environ["TMPDIR"] = tmp_dir_path
+
+            options.binary_location = "/var/lib/flatpak/exports/bin/org.mozilla.firefox"
+            options.set_preference("media.autoplay.default", 0)  # 0=allow all, 1=block audible, 5=block all
+            options.set_preference("media.autoplay.blocking_policy", 0)
+            options.set_preference("media.autoplay.allow-muted", True)
+
+            options.add_argument("-profile")
+            options.add_argument(os.path.expanduser("~/.var/app/org.mozilla.firefox/.mozilla/firefox/21q8yu91.jukebox"))
+
+            # Use local geckodriver in project directory
+            geckodriver_path = os.path.join(os.path.dirname(__file__), "tmp/geckodriver")
+            if os.path.exists(geckodriver_path):
+                # print(f"Using geckodriver at: {geckodriver_path}")
+                service = Service(executable_path=geckodriver_path, log_output="tmp/gecko.log")
+                # service = Service(GeckoDriverManager().install(), log_output="gecko.log")
+                self._driver = webdriver.Firefox(service=service, options=options)
+
+            else:
+                # Fallback to system geckodriver
+                print("Using system geckodriver")
+                self._driver = webdriver.Firefox(options=options)
+        else:
+            # Windows - use existing profile
+            root_profile_path = r"C:\Users\wyrmwood\AppData\Roaming\Mozilla\Firefox\Profiles\j504w7ys.default-release"
+            options.add_argument("-profile")
+            options.add_argument(root_profile_path)
+            self._driver = webdriver.Firefox(options=options)
 
     @property
     def driver(self) -> WebDriver:
