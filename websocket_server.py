@@ -2,6 +2,7 @@
 Websocket server for switching shuffled playlists
 """
 
+import logging
 import random
 
 from fastapi import FastAPI, WebSocket
@@ -10,8 +11,15 @@ from selenium.webdriver.chrome.webdriver import WebDriver
 from starlette.websockets import WebSocketDisconnect
 from ytmusicapi import YTMusic
 
-from webdriver_manager.firefox import GeckoDriverManager
-import os
+
+# Logging configuration
+DATE_FORMAT: str = "%Y-%m-%dT%H:%M:%S"
+FORMAT: str = "%(asctime)s.%(msecs)03d [%(levelname)s] [%(module)s.%(lineno)s:%(funcName)s] %(message)s"
+
+logging.basicConfig(level=logging.INFO, format=FORMAT, datefmt=DATE_FORMAT)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 APP = FastAPI()
 PORT = 26796
@@ -20,7 +28,6 @@ playlists = {
     "dark": {
         "council_of_9": "OLAK5uy_m1D_o2TQJpVuShY46eOjIzqeT_d_ffOKM",
         "dead_melodies": "OLAK5uy_n3sePlA6VMDr05B0kxjIFwnU1xeiOxxT4",
-        "secession": "OLAK5uy_kUiga6aIUy2vl5qJjvu-3x1lNVVp62Nwc",
         "ghelfi_explore": "PLbHUA-o_5dgI6tffbLSHhgBVx8j3Y42sg",
         "ghelfi_cthulhu": "PLbHUA-o_5dgIOfXtdXSiTyul4_0IkfIk0",
         "norse_dark": "PLOofa859fAd1h-lPKuYSnj3dDjeGo43nt",
@@ -44,6 +51,7 @@ playlists = {
         "kingdom_of_heaven": "OLAK5uy_nBJGbRP2Ei0bsysPMlUKu9ewztbcbv5VY",
         "destiny": "OLAK5uy_l7l9jJeZm2FisO-3dBAKWilvZ4tltIdJE",
         "kalots": "OLAK5uy_n8T7sbqNO2Bm87mbt3uHVaWC17hS2kEfY",
+        "secession": "OLAK5uy_kUiga6aIUy2vl5qJjvu-3x1lNVVp62Nwc",
     },
 }
 
@@ -96,7 +104,7 @@ class Driver:
             cls._instance._driver = None
             cls._instance.combat_playlist = COMBAT
             cls._instance.dark_playlist = DARK
-            cls._instance.start_playlist = START
+            cls._instance.start_playlist = random.choice(list(playlists["start"].values()))
             cls._instance.base_url = "https://music.youtube.com/watch?&list={}&shuffle=1"
             cls._instance._setup_driver()
             # Navigate to START playlist after driver creation
@@ -132,14 +140,14 @@ class Driver:
             # Use local geckodriver in project directory
             geckodriver_path = os.path.join(os.path.dirname(__file__), "tmp/geckodriver")
             if os.path.exists(geckodriver_path):
-                # print(f"Using geckodriver at: {geckodriver_path}")
+                logger.debug(f"Using geckodriver at: {geckodriver_path}")
                 service = Service(executable_path=geckodriver_path, log_output="tmp/gecko.log")
                 # service = Service(GeckoDriverManager().install(), log_output="gecko.log")
                 self._driver = webdriver.Firefox(service=service, options=options)
 
             else:
                 # Fallback to system geckodriver
-                print("Using system geckodriver")
+                logger.info("Using system geckodriver")
                 self._driver = webdriver.Firefox(options=options)
         else:
             # Windows - use existing profile
@@ -158,9 +166,12 @@ class Driver:
         """
         if not self._driver:
             return
+
         # Check if we're already on the correct playlist
         if playlist_id in self.driver.current_url:
             return
+
+        logger.info(f"Opening playlist: {self._name_from_id(playlist_id)}")
         track_url = self.base_url.format(playlist_id)
         self.driver.get(track_url)
 
@@ -168,8 +179,20 @@ class Driver:
         """
         Starts music playback, ensuring the right playlist is selected.
         """
-        playlist = self.combat_playlist if combat else self.dark_playlist
+        playlist = (
+            random.choice(list(playlists["combat"].values()))
+            if combat
+            else random.choice(list(playlists["dark"].values()))
+        )
+
         self._open_playlist(playlist)
+
+    def _name_from_id(self, playlist_id: str) -> str:
+        for category in playlists.values():
+            for name, pid in category.items():
+                if pid == playlist_id:
+                    return name
+        return "unknown"
 
 
 @APP.websocket("/ws")
@@ -182,15 +205,15 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             message = await websocket.receive_text()
             if message == "combat_start":
-                print("Starting combat music")
+                logger.info("Starting combat music")
                 driver.start_music(combat=True)
             else:
-                print("Starting ambient music")
+                logger.info("Starting ambient music")
                 driver.start_music(combat=False)
     except WebSocketDisconnect:
-        print("Websocket disconnected")
+        logger.info("Websocket disconnected")
     finally:
-        print("Websocket closed")
+        logger.debug("Websocket closed")
 
 
 if __name__ == "__main__":
