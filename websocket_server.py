@@ -122,6 +122,7 @@ class Driver:
         from selenium.webdriver.firefox.options import Options
 
         options = Options()
+        options.add_argument("--headless")  # Enable headless mode
 
         if platform.system() == "Linux":
             # Linux - use existing flatpak profile with uBlock installed
