@@ -4,12 +4,15 @@ Websocket server for switching shuffled playlists
 
 import logging
 import random
+import os
+import argparse
 
 from fastapi import FastAPI, WebSocket
 from selenium import webdriver
 from selenium.webdriver.chrome.webdriver import WebDriver
 from starlette.websockets import WebSocketDisconnect
 from ytmusicapi import YTMusic
+from dotenv import load_dotenv
 
 
 # Logging configuration
@@ -98,10 +101,11 @@ class Driver:
     # https://www.youtube.com/watch?v=p81B2zlyz_M&list=PLOofa859fAd1h-lPKuYSnj3dDjeGo43nt&pp=gAQB
     # https://music.youtube.com/watch?playlist=PLOofa859fAd0932pUaNEUP-b2J6Ly5Pcn
 
-    def __new__(cls):
+    def __new__(cls, headless: bool = False):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._driver = None
+            cls._instance._headless = headless
             cls._instance.combat_playlist = COMBAT
             cls._instance.dark_playlist = DARK
             cls._instance.start_playlist = random.choice(list(playlists["start"].values()))
@@ -109,6 +113,9 @@ class Driver:
             cls._instance._setup_driver()
             # Navigate to START playlist after driver creation
             cls._instance._open_playlist(cls._instance.start_playlist)
+        else:
+            # Update headless flag on existing instance (no restart)
+            cls._instance._headless = headless
 
         return cls._instance
 
@@ -122,7 +129,8 @@ class Driver:
         from selenium.webdriver.firefox.options import Options
 
         options = Options()
-        options.add_argument("--headless")  # Enable headless mode
+        if self._headless:
+            options.add_argument("--headless")  # Enable headless mode only when requested
 
         if platform.system() == "Linux":
             # Linux - use existing flatpak profile with uBlock installed
@@ -152,7 +160,7 @@ class Driver:
                 self._driver = webdriver.Firefox(options=options)
         else:
             # Windows - use existing profile
-            root_profile_path = r"C:\Users\wyrmwood\AppData\Roaming\Mozilla\Firefox\Profiles\j504w7ys.default-release"
+            root_profile_path = r"C:\\Users\\wyrmwood\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\j504w7ys.default-release"
             options.add_argument("-profile")
             options.add_argument(root_profile_path)
             self._driver = webdriver.Firefox(options=options)
@@ -162,9 +170,7 @@ class Driver:
         return self._driver
 
     def _open_playlist(self, playlist_id: str):
-        """
-        Opens a playlist by its ID, avoiding reload if already on the same playlist.
-        """
+        """Opens a playlist by its ID, avoiding reload if already on the same playlist."""
         if not self._driver:
             return
 
@@ -176,10 +182,8 @@ class Driver:
         track_url = self.base_url.format(playlist_id)
         self.driver.get(track_url)
 
-    def start_music(self, combat=False):
-        """
-        Starts music playback, ensuring the right playlist is selected.
-        """
+    def start_music(self, combat: bool = False):
+        """Starts music playback, ensuring the right playlist is selected."""
         playlist = (
             random.choice(list(playlists["combat"].values()))
             if combat
@@ -217,9 +221,56 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.debug("Websocket closed")
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    """Parse a boolean environment variable with common truthy/falsey values."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    raw_lower = raw.strip().lower()
+    if raw_lower in {"1", "true", "yes", "y", "on"}:
+        return True
+    if raw_lower in {"0", "false", "no", "n", "off"}:
+        return False
+    # Fallback: log and return default
+    logger.warning("Invalid boolean for %s=%r, using default %s", name, raw, default)
+    return default
+
+
+def _parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the websocket server."""
+    parser = argparse.ArgumentParser(description="Websocket server for switching shuffled playlists")
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run the YouTube Music Firefox driver in headless mode",
+    )
+    parser.add_argument(
+        "--no-headless",
+        action="store_true",
+        help="Force non-headless mode (overrides env/--headless)",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
+    # Load environment variables from a .env file if present
+    load_dotenv()
+
+    args = _parse_args()
+
+    # Precedence: CLI > ENV > default(False)
+    env_headless = _env_bool("HEADLESS", default=False)
+    if args.no_headless:
+        headless = False
+    elif args.headless:
+        headless = True
+    else:
+        headless = env_headless
+
+    logger.info("Starting websocket server (headless=%s)", headless)
+
     # Instantiate Singleton BEFORE Uvicorn starts
-    driver = Driver()
+    driver = Driver(headless=headless)
     import uvicorn
 
     uvicorn.run(APP, host="127.0.0.1", port=PORT, workers=1)
