@@ -6,10 +6,13 @@ import logging
 import random
 import os
 import argparse
+import threading
+from datetime import datetime
 
 from fastapi import FastAPI, WebSocket
 from selenium import webdriver
 from selenium.webdriver.chrome.webdriver import WebDriver
+from selenium.common.exceptions import WebDriverException
 from starlette.websockets import WebSocketDisconnect
 from ytmusicapi import YTMusic
 from dotenv import load_dotenv
@@ -110,9 +113,14 @@ class Driver:
             cls._instance.dark_playlist = DARK
             cls._instance.start_playlist = random.choice(list(playlists["start"].values()))
             cls._instance.base_url = "https://music.youtube.com/watch?&list={}&shuffle=1"
+            cls._instance._current_playlist_type = "start"  # Track playlist type: "start", "combat", or "dark"
+            cls._instance._last_command_time = datetime.now()
+            cls._instance._monitoring = False
+            cls._instance._monitor_thread = None
             cls._instance._setup_driver()
             # Navigate to START playlist after driver creation
             cls._instance._open_playlist(cls._instance.start_playlist)
+            cls._instance._start_monitoring()
         else:
             # Update headless flag on existing instance (no restart)
             cls._instance._headless = headless
@@ -129,6 +137,9 @@ class Driver:
         from selenium.webdriver.firefox.options import Options
 
         options = Options()
+        # Note: headless Firefox can cause choppy/glitchy audio on some systems due to
+        # missing GPU acceleration and different CPU scheduling. Use headless=True only
+        # for non-audio-quality tests (CI, smoke tests, functional validation, etc.).
         if self._headless:
             options.add_argument("--headless")  # Enable headless mode only when requested
 
@@ -190,6 +201,8 @@ class Driver:
             else random.choice(list(playlists["dark"].values()))
         )
 
+        self._current_playlist_type = "combat" if combat else "dark"
+        self._last_command_time = datetime.now()
         self._open_playlist(playlist)
 
     def _name_from_id(self, playlist_id: str) -> str:
@@ -198,6 +211,96 @@ class Driver:
                 if pid == playlist_id:
                     return name
         return "unknown"
+
+    def _is_playlist_ended(self) -> bool:
+        """Check if the current playlist has ended by examining YouTube Music player state."""
+        try:
+            # Check if we can find the play button (not pause button)
+            # When music is playing, there's a pause button; when ended, there's a play button
+            # Also check the progress bar and time remaining
+
+            # Method 1: Check if player shows it's at the end
+            current_time = self._driver.execute_script("""
+                const player = document.querySelector('video');
+                if (player) {
+                    return {
+                        currentTime: player.currentTime,
+                        duration: player.duration,
+                        ended: player.ended,
+                        paused: player.paused
+                    };
+                }
+                return null;
+            """)
+
+            if current_time and current_time.get('ended'):
+                return True
+
+            # Method 2: Check if we're very close to the end and paused
+            if current_time and current_time.get('paused'):
+                duration = current_time.get('duration', 0)
+                current = current_time.get('currentTime', 0)
+                if duration > 0 and (duration - current) < 2:  # Within 2 seconds of end
+                    return True
+
+            return False
+
+        except (WebDriverException, Exception) as e:
+            logger.debug(f"Error checking playlist state: {e}")
+            return False
+
+    def _rotate_start_playlist(self):
+        """Rotate to a new random start playlist."""
+        new_playlist = random.choice(list(playlists["start"].values()))
+        # Ensure we pick a different playlist if possible
+        if len(playlists["start"]) > 1:
+            attempts = 0
+            while new_playlist == self.start_playlist and attempts < 10:
+                new_playlist = random.choice(list(playlists["start"].values()))
+                attempts += 1
+
+        self.start_playlist = new_playlist
+        self._current_playlist_type = "start"
+        logger.info(f"Auto-rotating to new start playlist: {self._name_from_id(new_playlist)}")
+        self._open_playlist(new_playlist)
+
+    def _monitor_playback(self):
+        """Background thread that monitors playback and auto-rotates start playlists."""
+        import time
+
+        logger.info("Starting playback monitor thread")
+
+        while self._monitoring:
+            try:
+                time.sleep(10)  # Check every 10 seconds
+
+                # Only auto-rotate if we're on a "start" playlist
+                if self._current_playlist_type != "start":
+                    continue
+
+                # Check if playlist has ended
+                if self._is_playlist_ended():
+                    logger.info("Start playlist ended, rotating to new start playlist")
+                    self._rotate_start_playlist()
+
+            except Exception as e:
+                logger.error(f"Error in playback monitor: {e}", exc_info=True)
+                time.sleep(5)  # Brief pause before retrying
+
+        logger.info("Playback monitor thread stopped")
+
+    def _start_monitoring(self):
+        """Start the background monitoring thread."""
+        if not self._monitoring:
+            self._monitoring = True
+            self._monitor_thread = threading.Thread(target=self._monitor_playback, daemon=True)
+            self._monitor_thread.start()
+
+    def _stop_monitoring(self):
+        """Stop the background monitoring thread."""
+        self._monitoring = False
+        if self._monitor_thread:
+            self._monitor_thread.join(timeout=5)
 
 
 @APP.websocket("/ws")
