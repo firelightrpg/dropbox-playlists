@@ -2,9 +2,16 @@
 Websocket server for switching shuffled playlists
 """
 
+
+import time
+
 from fastapi import FastAPI, WebSocket
 from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.webdriver import WebDriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 from starlette.websockets import WebSocketDisconnect
 from ytmusicapi import YTMusic
 
@@ -22,6 +29,7 @@ playlists = {
         "es_dark": "PLOofa859fAd0GJQvfYHaG-AusaUFodSB0",
         "sarah_dark": "PLOofa859fAd0Zkjx1Wy40xwyaRiTjmLT7",
         "angelic_dark": "PLj71cZ_KjA3Pb3fZLLfyiE0EOZiw0cVL0",
+        "last-kingdom": "OLAK5uy_mZIGETZHwMeRVHVO4Gh_tYqapGP2GkIb4",
     },
     "combat": {
         "doom": "OLAK5uy_kSfcuckNboAymIpsoq6hb1y5TvtyUU6p4",
@@ -34,9 +42,17 @@ playlists = {
     },
 }
 
-DARK = playlists["dark"]["dead_melodies"]
+DARK = playlists["dark"]["last-kingdom"]
 COMBAT = playlists["combat"]["sarah_combat"]
 START = "OLAK5uy_mZIGETZHwMeRVHVO4Gh_tYqapGP2GkIb4"
+
+# Reverse lookup: playlist ID -> human-readable name
+PLAYLIST_NAMES: dict[str, str] = {
+    playlist_id: name
+    for category in playlists.values()
+    for name, playlist_id in category.items()
+}
+PLAYLIST_NAMES[START] = "start"
 
 # DARK = playlists["dark"]["sarah_dark"]
 # COMBAT = playlists["combat"]["ghelfi_combat"]
@@ -97,12 +113,14 @@ class Driver:
         if self._driver is not None:
             return  # Ensure we don't instantiate twice
 
-        root_profile_path = r"C:\Users\wyrmwood\AppData\Roaming\Mozilla\Firefox\Profiles\j504w7ys.default-release"
+        options = webdriver.ChromeOptions()
+        options.binary_location = "/usr/bin/brave-browser"
+        options.add_argument("--autoplay-policy=no-user-gesture-required")
+        self._driver = webdriver.Chrome(options=options)
 
-        options = webdriver.FirefoxOptions()
-        options.add_argument("-profile")
-        options.add_argument(root_profile_path)
-        self._driver = webdriver.Firefox(options=options)
+        # Let Brave fully initialize Shields before the first real navigation
+        self._driver.get("about:blank")
+        time.sleep(4)
 
     @property
     def driver(self) -> WebDriver:
@@ -117,8 +135,25 @@ class Driver:
         # Check if we're already on the correct playlist
         if playlist_id in self.driver.current_url:
             return
+        name = PLAYLIST_NAMES.get(playlist_id, playlist_id)
+        print(f"Switching to playlist: {name}")
         track_url = self.base_url.format(playlist_id)
         self.driver.get(track_url)
+        self._click_play()
+
+    def _click_play(self):
+        """
+        Waits for the play button to appear and clicks it.
+        """
+        try:
+            play_button = WebDriverWait(self._driver, 10).until(
+                EC.element_to_be_clickable(
+                    (By.CSS_SELECTOR, '[aria-label="Play"]')
+                )
+            )
+            play_button.click()
+        except TimeoutException:
+            print("Play button not found or already playing")
 
     def start_music(self, combat=False):
         """
@@ -138,10 +173,8 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             message = await websocket.receive_text()
             if message == "combat_start":
-                print("Starting combat music")
                 driver.start_music(combat=True)
             else:
-                print("Starting ambient music")
                 driver.start_music(combat=False)
     except WebSocketDisconnect:
         print("Websocket disconnected")
