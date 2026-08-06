@@ -8,12 +8,17 @@ import time
 from fastapi import FastAPI, WebSocket
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from starlette.websockets import WebSocketDisconnect
 from ytmusicapi import YTMusic
+
+from selenium import webdriver
+from selenium.webdriver.firefox.service import Service
+from selenium.webdriver.firefox.options import Options
 
 APP = FastAPI()
 PORT = 26796
@@ -42,8 +47,8 @@ playlists = {
     },
 }
 
-DARK = playlists["dark"]["last-kingdom"]
-COMBAT = playlists["combat"]["sarah_combat"]
+DARK = playlists["dark"]["dead_melodies"]
+COMBAT = playlists["combat"]["norse_combat"]
 START = "OLAK5uy_mZIGETZHwMeRVHVO4Gh_tYqapGP2GkIb4"
 
 # Reverse lookup: playlist ID -> human-readable name
@@ -111,14 +116,15 @@ class Driver:
 
     def _setup_driver(self):
         if self._driver is not None:
-            return  # Ensure we don't instantiate twice
+                return
 
-        options = webdriver.ChromeOptions()
-        options.binary_location = "/usr/bin/brave-browser"
-        options.add_argument("--autoplay-policy=no-user-gesture-required")
-        self._driver = webdriver.Chrome(options=options)
-
-        # Let Brave fully initialize Shields before the first real navigation
+        options = Options()
+        options.set_preference("dom.webdriver.enabled", False)
+        options.set_preference("media.autoplay.default", 0) # Autoplay allowed        
+        service = Service(executable_path="/usr/local/bin/geckodriver")        
+        self._driver = webdriver.Firefox(service=service, options=options)
+        addon_path = "/home/grimwyrm/github/dropbox-playlists/ublock_origin.xpi"
+        self._driver.install_addon(addon_path, temporary=True)
         self._driver.get("about:blank")
         time.sleep(4)
 
@@ -139,7 +145,8 @@ class Driver:
         print(f"Switching to playlist: {name}")
         track_url = self.base_url.format(playlist_id)
         self.driver.get(track_url)
-        self._click_play()
+        # self._click_play()
+
 
     def _click_play(self):
         """

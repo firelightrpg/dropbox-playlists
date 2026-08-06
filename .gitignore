@@ -2,7 +2,7 @@
 venv/
 .idea/
 .env
-
+*.log
 __pycache__/
 /*.json
 /jsons
