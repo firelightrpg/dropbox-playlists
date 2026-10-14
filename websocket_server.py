@@ -3,6 +3,7 @@ Websocket server for switching shuffled playlists
 """
 
 
+import random
 import time
 
 from fastapi import FastAPI, WebSocket
@@ -47,8 +48,8 @@ playlists = {
     },
 }
 
-DARK = playlists["dark"]["dead_melodies"]
-COMBAT = playlists["combat"]["norse_combat"]
+DARK = random.choice(list(playlists["dark"].values()))
+COMBAT = random.choice(list(playlists["combat"].values()))
 START = "OLAK5uy_mZIGETZHwMeRVHVO4Gh_tYqapGP2GkIb4"
 
 # Reverse lookup: playlist ID -> human-readable name
