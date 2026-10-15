@@ -1,28 +1,34 @@
 """
-Websocket server for switching shuffled playlists
+Websocket and HTTP server for switching finite music cues.
+Plays isolated single tracks without playlist chaining, enforces
+silence states, and provides HTTP trigger links for markdown notes.
 """
 
-
+import asyncio
+import os
 import random
+import sys
 import time
+import traceback
 
 from fastapi import FastAPI, WebSocket
+from fastapi.responses import HTMLResponse
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from starlette.websockets import WebSocketDisconnect
-from ytmusicapi import YTMusic
-
-from selenium import webdriver
-from selenium.webdriver.firefox.service import Service
-from selenium.webdriver.firefox.options import Options
 
 APP = FastAPI()
 PORT = 26796
+
+# Playback parameters (seconds)
+COMBAT_PLAY_DURATION = 60.0
+COMBAT_PRE_ROLL_SILENCE = 1.5
+POST_COMBAT_COOLDOWN = 30.0
+FADE_DURATION = 6.0
 
 playlists = {
     "dark": {
@@ -50,54 +56,10 @@ playlists = {
 
 DARK = random.choice(list(playlists["dark"].values()))
 COMBAT = random.choice(list(playlists["combat"].values()))
-START = "OLAK5uy_mZIGETZHwMeRVHVO4Gh_tYqapGP2GkIb4"
-
-# Reverse lookup: playlist ID -> human-readable name
-PLAYLIST_NAMES: dict[str, str] = {
-    playlist_id: name
-    for category in playlists.values()
-    for name, playlist_id in category.items()
-}
-PLAYLIST_NAMES[START] = "start"
-
-# DARK = playlists["dark"]["sarah_dark"]
-# COMBAT = playlists["combat"]["ghelfi_combat"]
-
-YTMUSIC = YTMusic()
-
-
-class Playlists:
-    _instance = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance.combat_playlist = YTMUSIC.get_playlist(COMBAT)
-            cls._instance.dark_playlist = YTMUSIC.get_playlist(DARK)
-
-        return cls._instance
-
-    @property
-    def combat_tracks(self):
-        return [_["videoId"] for _ in self.combat_playlist["tracks"]]
-
-    @property
-    def dark_tracks(self):
-        return [_["videoId"] for _ in self.dark_playlist["tracks"]]
-
-
-PLAYLISTS = Playlists()
 
 
 class Driver:
     _instance = None
-
-    """
-    
-    """
-    # https://www.youtube.com/watch?&list=PLOofa859fAd1h-lPKuYSnj3dDjeGo43nt&pp=gAQB&shuffle=1&loop=1
-    # https://www.youtube.com/watch?v=p81B2zlyz_M&list=PLOofa859fAd1h-lPKuYSnj3dDjeGo43nt&pp=gAQB
-    # https://music.youtube.com/watch?playlist=PLOofa859fAd0932pUaNEUP-b2J6Ly5Pcn
 
     def __new__(cls):
         if cls._instance is None:
@@ -105,85 +67,273 @@ class Driver:
             cls._instance._driver = None
             cls._instance.combat_playlist = COMBAT
             cls._instance.dark_playlist = DARK
-            cls._instance.start_playlist = START
-            cls._instance.base_url = (
-                "https://music.youtube.com/watch?&list={}&shuffle=1"
-            )
             cls._instance._setup_driver()
-            # Navigate to START playlist after driver creation
-            cls._instance._open_playlist(cls._instance.start_playlist)
-
         return cls._instance
 
     def _setup_driver(self):
         if self._driver is not None:
-                return
+            return
 
+        print("[Driver] Initializing Firefox with geckodriver...")
         options = Options()
         options.set_preference("dom.webdriver.enabled", False)
-        options.set_preference("media.autoplay.default", 0) # Autoplay allowed        
-        service = Service(executable_path="/usr/local/bin/geckodriver")        
+        options.set_preference("media.autoplay.default", 0)
+        service = Service(executable_path="/usr/local/bin/geckodriver")
         self._driver = webdriver.Firefox(service=service, options=options)
+
         addon_path = "/home/grimwyrm/github/dropbox-playlists/ublock_origin.xpi"
-        self._driver.install_addon(addon_path, temporary=True)
+        if not os.path.exists(addon_path):
+            addon_path = "/home/grim/github/dropbox-playlists/ublock_origin.xpi"
+
+        if os.path.exists(addon_path):
+            print(f"[Driver] Installing uBlock Origin from: {addon_path}")
+            self._driver.install_addon(addon_path, temporary=True)
+        else:
+            print(f"[Driver] Warning: Addon not found at {addon_path}, continuing without it.")
+
         self._driver.get("about:blank")
-        time.sleep(4)
+        time.sleep(2)
+        print("[Driver] Browser initialized.")
 
-    @property
-    def driver(self) -> WebDriver:
-        return self._driver
+    def play_category(self, combat: bool = False):
+        playlist_id = self.combat_playlist if combat else self.dark_playlist
+        url = f"https://music.youtube.com/watch?list={playlist_id}&shuffle=1"
+        print(f"[Driver] Opening {'combat' if combat else 'dark'} playlist: {url}")
+        self._driver.get(url)
+        self.set_volume(1.0)
+        self._arm_auto_fade_and_stop()
 
-    def _open_playlist(self, playlist_id: str):
+    def _arm_auto_fade_and_stop(self):
         """
-        Opens a playlist by its ID, avoiding reload if already on the same playlist.
+        Monitors playback progress in the browser DOM. When within 6 seconds
+        of the track ending, performs a smooth fade down to 0 and pauses,
+        preventing abrupt cuts and suppressing autoplay chaining.
         """
-        if not self._driver:
-            return
-        # Check if we're already on the correct playlist
-        if playlist_id in self.driver.current_url:
-            return
-        name = PLAYLIST_NAMES.get(playlist_id, playlist_id)
-        print(f"Switching to playlist: {name}")
-        track_url = self.base_url.format(playlist_id)
-        self.driver.get(track_url)
-        # self._click_play()
+        js = """
+        const v = document.querySelector('video');
+        if (v && !v._fade_trap_armed) {
+            v._fade_trap_armed = true;
+            v.loop = false;
 
+            const checkTailInterval = setInterval(() => {
+                if (!v || v.paused) return;
 
-    def _click_play(self):
-        """
-        Waits for the play button to appear and clicks it.
+                // If within 6 seconds of completion, start dissolving out
+                if (v.duration && (v.duration - v.currentTime <= 6.0) && !v._tail_fading) {
+                    v._tail_fading = true;
+                    const fadeDuration = (v.duration - v.currentTime) * 1000;
+                    const startVol = v.volume;
+                    const startTime = performance.now();
+
+                    const fadeTimer = setInterval(() => {
+                        const elapsed = performance.now() - startTime;
+                        const progress = Math.min(1.0, elapsed / Math.max(100, fadeDuration));
+                        v.volume = Math.max(0.0, startVol * Math.pow(1.0 - progress, 2));
+
+                        if (progress >= 1.0) {
+                            clearInterval(fadeTimer);
+                            clearInterval(checkTailInterval);
+                            v.pause();
+                            v.volume = 1.0;
+                            v._tail_fading = false;
+                        }
+                    }, 50);
+                }
+            }, 300);
+
+            // Safety trap for exact completion
+            v.addEventListener('ended', (e) => {
+                e.stopImmediatePropagation();
+                v.pause();
+                v.volume = 1.0;
+                v._tail_fading = false;
+            }, true);
+        }
         """
         try:
-            play_button = WebDriverWait(self._driver, 10).until(
-                EC.element_to_be_clickable(
-                    (By.CSS_SELECTOR, '[aria-label="Play"]')
-                )
-            )
-            play_button.click()
-        except TimeoutException:
-            print("Play button not found or already playing")
+            self._driver.execute_script(js)
+        except Exception as e:
+            print(f"[Driver] Warning arming fade trap: {e}")
 
-    def start_music(self, combat=False):
+    def pause_media(self):
+        try:
+            self._driver.execute_script("const v = document.querySelector('video'); if (v) v.pause();")
+        except Exception as e:
+            print(f"[Driver] Pause error: {e}")
+
+    def set_volume(self, volume: float):
+        try:
+            clamped = max(0.0, min(1.0, volume))
+            self._driver.execute_script(f"const v = document.querySelector('video'); if (v) v.volume = {clamped};")
+        except Exception as e:
+            print(f"[Driver] Volume error: {e}")
+
+    def fade_out_dom(self, duration_sec: float = FADE_DURATION):
+        """Executes a 60fps exponential fade-out directly in the Firefox DOM."""
+        js_fade = f"""
+        const v = document.querySelector('video');
+        if (v && !v.paused) {{
+            const duration = {duration_sec} * 1000;
+            const startVol = v.volume;
+            const startTime = performance.now();
+            
+            const fadeInterval = setInterval(() => {{
+                const elapsed = performance.now() - startTime;
+                const progress = Math.min(1.0, elapsed / duration);
+                
+                v.volume = Math.max(0.0, startVol * Math.pow(1.0 - progress, 2));
+                
+                if (progress >= 1.0) {{
+                    clearInterval(fadeInterval);
+                    v.pause();
+                    v.volume = 1.0;
+                }}
+            }}, 50);
+        }}
         """
-        Starts music playback, ensuring the right playlist is selected.
-        """
-        playlist = self.combat_playlist if combat else self.dark_playlist
-        self._open_playlist(playlist)
+        try:
+            self._driver.execute_script(js_fade)
+        except Exception as e:
+            print(f"[Driver] Native fade error: {e}")
+
+
+class AudioSessionController:
+    def __init__(self, audio_driver: Driver):
+        self.driver = audio_driver
+        self.active_task: asyncio.Task | None = None
+
+    def cancel_active(self):
+        if self.active_task and not self.active_task.done():
+            self.active_task.cancel()
+            self.active_task = None
+
+    async def fade_out(self, duration: float = FADE_DURATION):
+        await asyncio.to_thread(self.driver.fade_out_dom, duration)
+        await asyncio.sleep(duration)
+
+    async def _ambient_lifecycle(self):
+        try:
+            print("[Audio] Ambient cue started. Playing naturally until track ends or manually faded.")
+            await asyncio.to_thread(self.driver.play_category, combat=False)
+        except asyncio.CancelledError:
+            pass
+
+    async def _combat_lifecycle(self):
+        try:
+            await asyncio.to_thread(self.driver.pause_media)
+            await asyncio.to_thread(self.driver.set_volume, 1.0)
+
+            print(f"[Audio] Combat drop. Holding {COMBAT_PRE_ROLL_SILENCE}s pre-roll silence.")
+            await asyncio.sleep(COMBAT_PRE_ROLL_SILENCE)
+
+            print(f"[Audio] Firing combat cue ({COMBAT_PLAY_DURATION}s clamp).")
+            await asyncio.to_thread(self.driver.play_category, combat=True)
+            await asyncio.sleep(COMBAT_PLAY_DURATION)
+
+            print("[Audio] Combat burst elapsed. Fading to table silence.")
+            await self.fade_out()
+            print("[Audio] Tactical combat burst complete. State is now SILENT.")
+        except asyncio.CancelledError:
+            pass
+
+    async def _combat_resolved_lifecycle(self):
+        try:
+            print("[Audio] Combat resolved. Fading track.")
+            await self.fade_out()
+            print(f"[Audio] Entering post-combat cooldown silence ({POST_COMBAT_COOLDOWN}s).")
+            await asyncio.sleep(POST_COMBAT_COOLDOWN)
+            print("[Audio] Cooldown elapsed. Firing ambient exposition track.")
+            await self._ambient_lifecycle()
+        except asyncio.CancelledError:
+            pass
+
+    def trigger_ambient(self):
+        self.cancel_active()
+        self.active_task = asyncio.create_task(self._ambient_lifecycle())
+
+    def trigger_fade(self):
+        self.cancel_active()
+        self.active_task = asyncio.create_task(self.fade_out())
+
+    def trigger_combat(self):
+        self.cancel_active()
+        self.active_task = asyncio.create_task(self._combat_lifecycle())
+
+    def trigger_combat_end(self):
+        self.cancel_active()
+        self.active_task = asyncio.create_task(self._combat_resolved_lifecycle())
+
+    def trigger_stop(self):
+        self.cancel_active()
+        self.driver.pause_media()
+        self.driver.set_volume(1.0)
+
+
+driver: Driver | None = None
+controller: AudioSessionController | None = None
+
+
+@APP.on_event("startup")
+async def startup_event():
+    global driver, controller
+    print("[Startup] Initializing Selenium Driver and Session Controller...")
+    driver = Driver()
+    controller = AudioSessionController(driver)
+    print("[Startup] System ready.")
+
+
+@APP.get("/trigger/{state}", response_class=HTMLResponse)
+async def http_trigger(state: str):
+    state = state.strip().lower()
+    if controller:
+        if state == "ambient":
+            controller.trigger_ambient()
+        elif state == "fade":
+            controller.trigger_fade()
+        elif state == "combat":
+            controller.trigger_combat()
+        elif state == "combat_end":
+            controller.trigger_combat_end()
+        elif state == "stop":
+            controller.trigger_stop()
+
+    return HTMLResponse(content=f"""
+        <html>
+        <head>
+            <script>
+                if (window.opener || window.history.length <= 1) {{
+                    window.close();
+                }} else {{
+                    window.history.back();
+                }}
+            </script>
+        </head>
+        <body style="background:#181818;color:#aaa;font-family:monospace;text-align:center;padding:25px;">
+            Triggered <b>{state}</b>... returning.
+        </body>
+        </html>
+    """)
 
 
 @APP.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """
-    Handles incoming WebSocket messages for switching music.
-    """
     await websocket.accept()
     try:
         while True:
             message = await websocket.receive_text()
-            if message == "combat_start":
-                driver.start_music(combat=True)
+            msg = message.strip()
+            if not controller:
+                continue
+            if msg == "combat_start":
+                controller.trigger_combat()
+            elif msg == "combat_end":
+                controller.trigger_combat_end()
+            elif msg == "fade":
+                controller.trigger_fade()
+            elif msg == "stop":
+                controller.trigger_stop()
             else:
-                driver.start_music(combat=False)
+                controller.trigger_ambient()
     except WebSocketDisconnect:
         print("Websocket disconnected")
     finally:
@@ -191,8 +341,12 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 if __name__ == "__main__":
-    # Instantiate Singleton BEFORE Uvicorn starts
-    driver = Driver()
     import uvicorn
 
-    uvicorn.run(APP, host="127.0.0.1", port=PORT, workers=1)
+    try:
+        print(f"Starting server on 127.0.0.1:{PORT}...")
+        uvicorn.run("websocket_server:APP", host="127.0.0.1", port=PORT, log_level="info")
+    except Exception as e:
+        print("Fatal error starting server:")
+        traceback.print_exc()
+        sys.exit(1)
